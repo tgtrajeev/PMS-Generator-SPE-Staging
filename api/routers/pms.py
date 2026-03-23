@@ -17,7 +17,14 @@ from db.models import SavedSpec
 
 router = APIRouter()
 
-OUTPUT_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "output")
+# On Render, use /tmp/pms_output (always writable). Locally keep api/output.
+if os.environ.get("RENDER"):
+    OUTPUT_DIR = "/tmp/pms_output"
+else:
+    OUTPUT_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "output")
+
+# Create output directory at import time so it always exists
+os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 
 @router.post("/generate_pms")

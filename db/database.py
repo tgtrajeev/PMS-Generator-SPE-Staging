@@ -7,8 +7,22 @@ import os
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker, declarative_base
 
-DB_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "pms_generator.db")
-DATABASE_URL = f"sqlite:///{DB_PATH}"
+# On Render (or any cloud env), use /tmp which is always writable.
+# Locally, keep the DB next to the project root.
+if os.environ.get("DATABASE_URL"):
+    # PostgreSQL or other external DB provided via env var
+    DATABASE_URL = os.environ["DATABASE_URL"]
+    # Fix Render's postgres:// → postgresql:// for SQLAlchemy
+    if DATABASE_URL.startswith("postgres://"):
+        DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+    DB_PATH = None
+elif os.environ.get("RENDER"):
+    # Render.com — use /tmp so writes always succeed
+    DB_PATH = "/tmp/pms_generator.db"
+    DATABASE_URL = f"sqlite:///{DB_PATH}"
+else:
+    DB_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "pms_generator.db")
+    DATABASE_URL = f"sqlite:///{DB_PATH}"
 
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

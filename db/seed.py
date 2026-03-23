@@ -178,9 +178,11 @@ def seed_all():
         seed_pressure_rating_codes(db)
         db.commit()
         return True
-    except Exception:
+    except Exception as e:
         db.rollback()
-        raise
+        # Log but never crash the app — seeding failure is non-fatal
+        print(f"[seed_all] Warning: seeding failed ({e}). App will still start.")
+        return False
     finally:
         db.close()
 
