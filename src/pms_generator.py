@@ -274,14 +274,15 @@ def generate_pms_excel(pms_data, output_dir):
     valve_data = pms_data.get("valves", {})
     valves = valve_data.get("valves", {})
 
-    spec_code = sc.get("spec_code", "")
-    pms_code = sc.get("pms_code", spec_code)
-    material_type = msr.get("material_type", "CS")
-    is_nace = sc.get("is_nace", False) or "N" in (sc.get("part3_code", "") or "")
-    is_low_temp = sc.get("is_low_temp", False) or "L" in (sc.get("part3_code", "") or "")
+    spec_code = str(sc.get("spec_code", "") or "")
+    pms_code  = str(sc.get("pms_code", spec_code) or spec_code)
+    material_type = str(msr.get("material_type", "CS") or "CS")
+    # Coerce to plain bool — JSON may deliver {} / null / 0 / "true" from some clients
+    is_nace    = bool(sc.get("is_nace", False)) or "N" in (str(sc.get("part3_code", "") or ""))
+    is_low_temp = bool(sc.get("is_low_temp", False)) or "L" in (str(sc.get("part3_code", "") or ""))
 
     # Determine effective material type for lookups
-    eff_mat = material_type
+    eff_mat = str(material_type)
     if material_type == "CS" and is_low_temp:
         eff_mat = "CS-LT"
 
@@ -382,7 +383,7 @@ def generate_pms_excel(pms_data, output_dir):
 
     # Row 4: Design Code
     mw(4, 6, 8, "Design Code: ", bold=True, left=True)
-    mw(4, 9, LAST_COL, DESIGN_CODE.get(is_nace, "ASME B 31.3"))
+    mw(4, 9, LAST_COL, DESIGN_CODE.get(bool(is_nace), "ASME B 31.3"))
 
     # Row 5: Service
     mw(5, 6, 8, "Service:", bold=True, left=True)
@@ -591,11 +592,12 @@ def generate_pms_excel(pms_data, output_dir):
         ws.cell(row=35, column=c).fill = fill_section
 
     wc(36, 1, "Stud Bolts")
-    bolt_mat = BOLT_MATERIAL.get((eff_mat, is_nace), "ASTM A 193 Gr. B7")
+    _key = (str(eff_mat), bool(is_nace))
+    bolt_mat = BOLT_MATERIAL.get(_key, "ASTM A 193 Gr. B7")
     mw(36, 2, LAST_COL, bolt_mat)
 
     wc(37, 1, "Hex Nuts")
-    nut_mat = NUT_MATERIAL.get((eff_mat, is_nace), "ASTM A 194 Gr. 2H")
+    nut_mat = NUT_MATERIAL.get(_key, "ASTM A 194 Gr. 2H")
     mw(37, 2, LAST_COL, nut_mat)
 
     wc(38, 1, "Gasket")
@@ -621,7 +623,10 @@ def generate_pms_excel(pms_data, output_dir):
     v_small_end_col = SC + VALVE_SMALL_SPLIT - 1   # last col of small bore
     v_large_start_col = SC + VALVE_SMALL_SPLIT      # first col of large bore
 
-    pc_int = int(piping_class) if str(piping_class).isdigit() else 150
+    try:
+        pc_int = int(piping_class)
+    except (TypeError, ValueError):
+        pc_int = 150
     ec_small = VALVE_END_CONNECTIONS.get((pc_int, "small"), "Socket Weld")
     ec_large = VALVE_END_CONNECTIONS.get((pc_int, "large"), "Flanged RF")
 
