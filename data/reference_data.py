@@ -265,11 +265,12 @@ GASKET_MATERIALS = {
 # ============================================================
 # BOLTING MATERIALS
 # ============================================================
+_COAT = ", XYLAR 2 + XYLAN 1070 coated with minimum combined thickness of 50\u03bcm"
 BOLTING_MATERIALS = {
-    "CS":     {"stud": "A193 B7",  "nut": "A194 2H",  "temp_range": "-29 to 400 degC"},
-    "CS-LT":  {"stud": "A320 L7",  "nut": "A194 4",   "temp_range": "-101 to 400 degC"},
-    "SS":     {"stud": "A193 B8",  "nut": "A194 8",   "temp_range": "-198 to 800 degC"},
-    "Alloy":  {"stud": "A193 B7",  "nut": "A194 2H",  "temp_range": "-29 to 540 degC"},
+    "CS":     {"stud": "ASTM A 193 Gr. B7M" + _COAT,       "nut": "ASTM A 194 Gr. 2HM" + _COAT,  "temp_range": "-29 to 400 degC"},
+    "CS-LT":  {"stud": "ASTM A 320 Gr. L7",                 "nut": "ASTM A 194 Gr. 7",             "temp_range": "-101 to 400 degC"},
+    "SS":     {"stud": "ASTM A 193 Gr. B8M Class 2",        "nut": "ASTM A 194 Gr. 8M",            "temp_range": "-198 to 800 degC"},
+    "Alloy":  {"stud": "ASTM A 193 Gr. B7",                 "nut": "ASTM A 194 Gr. 2H",            "temp_range": "-29 to 540 degC"},
 }
 
 # ============================================================

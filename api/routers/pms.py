@@ -25,12 +25,17 @@ async def api_generate_pms(data: dict, db: Session = Depends(get_db)):
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
     # Generate the Excel file
-    f = io.StringIO()
-    with redirect_stdout(f):
-        excel_path = generate_pms_excel(data, OUTPUT_DIR)
+    excel_path = None
+    gen_error = None
+    try:
+        f = io.StringIO()
+        with redirect_stdout(f):
+            excel_path = generate_pms_excel(data, OUTPUT_DIR)
+    except Exception as exc:
+        gen_error = str(exc)
 
     if not excel_path:
-        return {"success": False, "error": "Excel generation failed", "filename": None}
+        return {"success": False, "error": gen_error or "Excel generation failed", "filename": None}
 
     filename = os.path.basename(excel_path)
 

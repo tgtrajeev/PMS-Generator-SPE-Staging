@@ -5,8 +5,11 @@ Outputs to Excel and console.
 Reference template: pms-A1LN.xlsx (20 NPS sizes, cols B-U, instructions in W-X)
 """
 
+import io
 import os
 import sys
+import tempfile
+import urllib.request
 from datetime import datetime
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -15,9 +18,12 @@ try:
     from openpyxl import Workbook
     from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
     from openpyxl.utils import get_column_letter
+    from openpyxl.drawing.image import Image as XLImage
     HAS_OPENPYXL = True
 except ImportError:
     HAS_OPENPYXL = False
+
+LOGO_URL = "https://www.shapoorjipallonjienergy.com/img/logo.png"
 
 from data.reference_data import (
     FLANGE_RATINGS_CS, FLANGE_RATINGS_SS,
@@ -80,13 +86,28 @@ WELDOLET_MOC = {
 }
 
 # Bolting by NACE flag
+_COAT = ", XYLAR 2 + XYLAN 1070 coated with minimum combined thickness of 50\u03bcm"
 BOLT_MATERIAL = {
-    True:  "ASTM A 320 Gr. L7M, XYLAR 2 + XYLAN 1070 coated with minimum combined thickness of 50\u03bcm",
-    False: "ASTM A 193 Gr. B7",
+    # (effective_material, is_nace) → stud bolt spec
+    ("CS",    False): "ASTM A 193 Gr. B7M" + _COAT,
+    ("CS",    True):  "ASTM A 320 Gr. L7M" + _COAT,
+    ("CS-LT", False): "ASTM A 320 Gr. L7",
+    ("CS-LT", True):  "ASTM A 320 Gr. L7M" + _COAT,
+    ("SS",    False): "ASTM A 193 Gr. B8M Class 2",
+    ("SS",    True):  "ASTM A 193 Gr. B8M Class 2",
+    ("Alloy", False): "ASTM A 193 Gr. B7",
+    ("Alloy", True):  "ASTM A 320 Gr. L7M" + _COAT,
 }
 NUT_MATERIAL = {
-    True:  "ASTM A 194 Gr. 7ML, XYLAR 2 + XYLAN 1070 coated with minimum combined thickness of 50\u03bcm",
-    False: "ASTM A 194 Gr. 2H",
+    # (effective_material, is_nace) → hex nut spec
+    ("CS",    False): "ASTM A 194 Gr. 2HM" + _COAT,
+    ("CS",    True):  "ASTM A 194 Gr. 7ML" + _COAT,
+    ("CS-LT", False): "ASTM A 194 Gr. 7",
+    ("CS-LT", True):  "ASTM A 194 Gr. 7ML" + _COAT,
+    ("SS",    False): "ASTM A 194 Gr. 8M",
+    ("SS",    True):  "ASTM A 194 Gr. 8M",
+    ("Alloy", False): "ASTM A 194 Gr. 2H",
+    ("Alloy", True):  "ASTM A 194 Gr. 7ML" + _COAT,
 }
 
 # Material display name
@@ -105,7 +126,7 @@ DESIGN_CODE = {
 
 # Gasket description by face type
 GASKET_DESC = {
-    "RF":  "ASME B 16.20, 4.5 mm, SS316/SS316L Spiral Wound with Flexible Graphite (F.G.) filler",
+    "RF":  "ASME B 16.20, 4.5mm, SS316/SS316L Spiral Wound with Flexible Graphite (F.G.) filler",
     "RTJ": "ASME B 16.20, Ring Joint, SS316/SS316L",
 }
 
@@ -308,28 +329,49 @@ def generate_pms_excel(pms_data, output_dir):
     # HEADER (Rows 1-6)
     # ══════════════════════════════════════════════════════════════
 
-    # A1:A6 merged vertically
-    ws.merge_cells(start_row=1, start_column=1, end_row=6, end_column=1)
+    # A1:E6 merged block — logo area
+    ws.merge_cells(start_row=1, start_column=1, end_row=6, end_column=5)
     for r in range(1, 7):
-        ws.cell(row=r, column=1).border = tb
-        ws.cell(row=r, column=1).font = font_n
-        ws.cell(row=r, column=1).alignment = ac
+        for c in range(1, 6):
+            cell = ws.cell(row=r, column=c)
+            cell.border = tb
+            cell.alignment = ac
+    # Increase row heights to accommodate larger logo
+    for r in range(1, 7):
+        ws.row_dimensions[r].height = 20
+
+    # Embed company logo in A1:E6
+    try:
+        import ssl
+        from PIL import Image as PILImage
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+        with urllib.request.urlopen(LOGO_URL, timeout=8, context=ctx) as resp:
+            logo_bytes = resp.read()
+        # Resize to fill A1:D6 (4 cols × 13 width ≈ 330px wide, 6 rows × 18pt ≈ 108px tall)
+        pil_img = PILImage.open(io.BytesIO(logo_bytes)).convert("RGBA")
+        pil_img = pil_img.resize((330, 108), PILImage.LANCZOS)
+        buf = io.BytesIO()
+        pil_img.save(buf, format='PNG')
+        buf.seek(0)
+        img = XLImage(buf)
+        ws.add_image(img, 'A1')
+    except Exception:
+        pass  # logo unavailable — leave merged area blank
 
     # Row 1: Title
-    mw(1, 2, 5, "")
     mw(1, 6, 17, "PIPING MATERIAL SPECIFICATION", bold=True)
     mw(1, 19, LAST_COL, f"Rev: {meta.get('revision', 'C0')}")
 
-    # Row 2: Labels (matching reference column positions)
-    mw(2, 2, 5, "")
+    # Row 2: Labels
     mw(2, 6, 9, "Piping Class")
     mw(2, 10, 12, "Material")
     mw(2, 13, 15, "C.A")
     mw(2, 16, 18, "Mill Tol")
     mw(2, 19, LAST_COL, "Sheet No.")
 
-    # Row 3: Values (User Input)
-    mw(3, 2, 5, "")
+    # Row 3: Values
     mw(3, 6, 7, spec_code)
     wc(3, 8, f"{piping_class}#")
     wc(3, 9, "")
@@ -339,17 +381,14 @@ def generate_pms_excel(pms_data, output_dir):
     mw(3, 19, LAST_COL, meta.get("revision", "0"))
 
     # Row 4: Design Code
-    mw(4, 2, 5, "")
     mw(4, 6, 8, "Design Code: ", bold=True, left=True)
     mw(4, 9, LAST_COL, DESIGN_CODE.get(is_nace, "ASME B 31.3"))
 
     # Row 5: Service
-    mw(5, 2, 5, "")
     mw(5, 6, 8, "Service:", bold=True, left=True)
     mw(5, 9, LAST_COL, line.get("fluid", msr.get("fluid_service", "General Service")))
 
     # Row 6: Branch Chart
-    mw(6, 2, 5, "")
     mw(6, 6, 8, "Branch Chart: ", bold=True, left=True)
     mw(6, 9, LAST_COL, "Ref. APPENDIX-1, Chart 1")
 
@@ -384,42 +423,36 @@ def generate_pms_excel(pms_data, output_dir):
             display_pairs.append((pt_pairs[i][0], pt_pairs[i][1]))  # Keep as int
             i += 1
 
-    # Limit to 5 display pairs (matching reference template layout)
-    display_pairs = display_pairs[:5]
+    # Limit to 7 display pairs — covers up to 300°C for CS / SS
+    # Column pairs: B:C(2), D:E(4), F:G(6), H:I(8), J:K(10), L:M(12), N:O(14)
+    display_pairs = display_pairs[:7]
 
     # Row 8: Press., barg — Row 9: Temp., °C
     wc(8, 1, "Press., barg", left=True)
     wc(9, 1, "Temp., \u00b0C", left=True)
 
-    # Write P-T pairs in merged column pairs: B:C, D:E, F:G, H:I, J:K
-    pt_starts = [2, 4, 6, 8, 10]
-    max_pt = min(len(display_pairs), 5)
+    pt_starts = [2, 4, 6, 8, 10, 12, 14, 16]
+    max_pt = min(len(display_pairs), 8)
     for i in range(max_pt):
         c = pt_starts[i]
         mw(8, c, c + 1, display_pairs[i][1])
         mw(9, c, c + 1, display_pairs[i][0])
-    for i in range(max_pt, 5):
+    for i in range(max_pt, 8):
         c = pt_starts[i]
         mw(8, c, c + 1, "")
         mw(9, c, c + 1, "")
 
-    # Extra pair L:M if available
-    if len(display_pairs) > 5:
-        mw(8, 12, 13, display_pairs[5][1])
-        mw(9, 12, 13, display_pairs[5][0])
-    else:
-        mw(8, 12, 13, "")
-        mw(9, 12, 13, "")
-
-    # Hydrotest pressure (cols 16-LAST_COL)
-    mw(8, 14, 15, "")
-    mw(8, 16, LAST_COL, "Hydrotest Pr. (barg)")
-    mw(9, 14, 15, "")
+    # Hydrotest pressure — placed right after the last P-T pair
+    # Pairs use cols 2-17 (8 pairs × 2 cols), so hydrotest starts at col 18
+    hydro_start = pt_starts[max_pt - 1] + 2 if max_pt > 0 else 18
+    if hydro_start < 18:
+        hydro_start = 18
+    mw(8, hydro_start, LAST_COL, "Hydrotest Pr. (barg)")
 
     # Hydrotest = 1.5 × max allowable pressure at ambient
     ambient_pressure = pt_pairs[0][1] if pt_pairs else 0
     hydro_barg = round(ambient_pressure * 1.5, 1) if ambient_pressure else ""
-    mw(9, 16, LAST_COL, hydro_barg)
+    mw(9, hydro_start, LAST_COL, hydro_barg)
 
     # ══════════════════════════════════════════════════════════════
     # PIPE DATA (Rows 10-18)
@@ -502,7 +535,10 @@ def generate_pms_excel(pms_data, output_dir):
         mw(row, 2, LAST_COL, "ASME B 16.9")
 
     wc(26, 1, "Plug")
-    mw(26, 2, LAST_COL, "Hex Head Plug, ASME B 16.11")
+    # Plug (hex head) is applicable for small bore only: NPS ½" – 1½" (cols SC to SC+3)
+    sb_end_col = SC + 3  # NPS 1.5" is the 4th size (index 3)
+    mw(26, SC, sb_end_col, "Hex Head Plug, ASME B 16.11")
+    mw(26, sb_end_col + 1, LAST_COL, "-")
 
     # Row 27: Weldolet
     wc(27, 1, "Weldolet")
@@ -555,11 +591,11 @@ def generate_pms_excel(pms_data, output_dir):
         ws.cell(row=35, column=c).fill = fill_section
 
     wc(36, 1, "Stud Bolts")
-    bolt_mat = BOLT_MATERIAL.get(is_nace, BOLT_MATERIAL[False])
+    bolt_mat = BOLT_MATERIAL.get((eff_mat, is_nace), "ASTM A 193 Gr. B7")
     mw(36, 2, LAST_COL, bolt_mat)
 
     wc(37, 1, "Hex Nuts")
-    nut_mat = NUT_MATERIAL.get(is_nace, NUT_MATERIAL[False])
+    nut_mat = NUT_MATERIAL.get((eff_mat, is_nace), "ASTM A 194 Gr. 2H")
     mw(37, 2, LAST_COL, nut_mat)
 
     wc(38, 1, "Gasket")

@@ -981,7 +981,8 @@ const App = {
             const nps6 = rows.find(r => r.nps === '6') || rows[0];
             this.data.thickness = {
                 design_pressure_psig: this._fullScheduleData.design_inputs.design_pressure_psig,
-                pipe_od_in: nps6.od_mm / 25.4,
+                pipe_od_in: parseFloat((nps6.od_mm / 25.4).toFixed(4)),
+                id_in: parseFloat(((nps6.od_mm - 2 * nps6.wt_nom_mm) / 25.4).toFixed(4)),
                 material_grade: this._fullScheduleData.design_inputs.material_grade,
                 design_temp_f: this._fullScheduleData.design_inputs.design_temp_f,
                 allowable_stress_psi: this._fullScheduleData.design_inputs.allowable_stress_psi,
@@ -990,7 +991,9 @@ const App = {
                 y_factor: this._fullScheduleData.design_inputs.y_factor,
                 corrosion_allowance_in: this._fullScheduleData.design_inputs.ca_mm / 25.4,
                 mill_tolerance_pct: this._fullScheduleData.design_inputs.mill_tolerance_pct,
-                t_nominal_min_in: nps6.t_min_mm / 25.4,
+                t_calculated_in: parseFloat((nps6.t_req_mm / 25.4).toFixed(4)),
+                t_min_required_in: parseFloat((nps6.t_min_mm / 25.4).toFixed(4)),
+                t_nominal_min_in: parseFloat((nps6.t_min_mm / 25.4).toFixed(4)),
                 t_nominal_min_mm: nps6.t_min_mm,
                 schedule_number: Math.round(1000 * this._fullScheduleData.design_inputs.design_pressure_psig / this._fullScheduleData.design_inputs.allowable_stress_psi),
             };
@@ -1299,16 +1302,20 @@ const App = {
             const part1Info = this._pmsRefData?.part1_options?.[part1];
             const specPressureClass = part1Info?.pressure_psig || 150;  // e.g. 150 for "A"
 
+            // Guard: ensure design_pressure_psig is a valid positive number
+            const dp = parseFloat(this.data.line_list?.design_pressure_psig) || 1;
+            const dt = parseFloat(this.data.line_list?.design_temp_f) || 70;
+
             let res = await fetch('/api/select_flanges', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    material_grade: this.data.msr.material_grade,
-                    material_type: this.data.msr.material_type,
+                    material_grade: this.data.msr.material_grade || 'A106 Gr.B',
+                    material_type: this.data.msr.material_type || 'CS',
                     // Use spec code class max pressure at ambient (not design temp)
                     // to ensure the auto-selected class matches the spec code Part 1
-                    design_pressure: this.data.line_list.design_pressure_psig,
-                    design_temp: this.data.line_list.design_temp_f,
+                    design_pressure: dp,
+                    design_temp: dt,
                 }),
             });
             this.data.flanges = await res.json();
@@ -1559,19 +1566,44 @@ const App = {
         const fl = this.data.flanges;
         const vl = this.data.valves;
 
+        // Fittings: large bore is the primary reference for the PMS table
+        const lb = ft.large_bore || {};
+        const sb = ft.small_bore || {};
         const fittingItems = [
-            ['Pipe', ft.pipe], ['90\u00b0 LR Elbow', ft.elbow_90], ['45\u00b0 Elbow', ft.elbow_45],
-            ['Equal Tee', ft.tee_equal], ['Reducing Tee', ft.tee_reducing],
-            ['Concentric Reducer', ft.reducer_concentric], ['Eccentric Reducer', ft.reducer_eccentric],
-            ['Pipe Cap', ft.cap],
+            ['Pipe',                lb.pipe],
+            ['90\u00b0 LR Elbow',  lb.elbow_90],
+            ['45\u00b0 Elbow',     lb.elbow_45],
+            ['Equal Tee',          lb.tee_equal],
+            ['Reducing Tee',       lb.tee_reducing],
+            ['Concentric Reducer', lb.reducer_concentric],
+            ['Eccentric Reducer',  lb.reducer_eccentric],
+            ['Pipe Cap',           lb.cap],
         ];
+        if (sb.small_bore_fittings) {
+            const toObj = v => typeof v === 'string' ? { material: v, standard: 'ASME B16.11' } : v;
+            fittingItems.push(['Coupling (SW \u00bd\u2033\u20132\u2033)',      toObj(sb.small_bore_fittings.coupling)]);
+            fittingItems.push(['Half-Coupling (SW \u00bd\u2033\u20132\u2033)', toObj(sb.small_bore_fittings.half_coupling)]);
+        }
         const fittingRows = fittingItems.map(([n, d]) =>
             `<tr><td>${n}</td><td>${d?.material || 'N/A'}</td><td>${d?.standard || 'ASTM'}</td></tr>`
         ).join('');
 
-        const valveRows = Object.entries(vl.valves || {}).map(([vt, v]) =>
-            `<tr><td>${vt}</td><td>${v.trim}</td><td>${v.seat}</td><td><code>${v.vds_tag}</code></td></tr>`
-        ).join('');
+        // Valves: merge small bore (SW/NPT) and large bore (Flanged) with label
+        const sbValves = vl.small_bore?.valves || {};
+        const lbValves = vl.large_bore?.valves || {};
+        const allValveTypes = new Set([...Object.keys(sbValves), ...Object.keys(lbValves)]);
+        const valveRows = [...allValveTypes].map(vt => {
+            const sv = sbValves[vt]; const lv = lbValves[vt];
+            if (sv && lv && sv.vds_tag !== lv.vds_tag) {
+                return `<tr>
+                    <td>${vt}</td><td>${lv.trim}</td><td>${lv.seat}</td>
+                    <td><code>${sv.vds_tag}</code> <small style="color:#888">(½\u2033\u20132\u2033)</small><br>
+                        <code>${lv.vds_tag}</code> <small style="color:#888">(2½\u2033\u201336\u2033)</small></td>
+                </tr>`;
+            }
+            const v = lv || sv;
+            return `<tr><td>${vt}</td><td>${v.trim}</td><td>${v.seat}</td><td><code>${v.vds_tag}</code></td></tr>`;
+        }).join('');
 
         document.getElementById('pms-preview').innerHTML = `
             <div class="pms-preview">
@@ -1616,7 +1648,7 @@ const App = {
                         <tr><td>Schedule Standard</td><td>${sch.standard}</td></tr>
                         <tr><td>Selected Schedule</td><td><strong>${sch.selected_schedule}</strong></td></tr>
                         <tr><td>Wall Thickness</td><td>${sch.selected_wall_thickness_in} in (${sch.selected_wall_thickness_mm} mm)</td></tr>
-                        <tr><td>Pipe OD / ID</td><td>${sch.pipe_od_in} in / ${sch.id_in} in</td></tr>
+                        <tr><td>Pipe OD / ID (NPS 6" ref)</td><td>${th.pipe_od_in} in / ${th.id_in} in</td></tr>
                     </table>
                 </div>
 
@@ -1653,7 +1685,9 @@ const App = {
                         <tbody>${valveRows}</tbody>
                     </table>
                     <div style="margin-top:8px;font-size:0.85rem;color:#7f8c8d">
-                        End Connection: ${vl.end_connection} | Pressure Class: #${vl.pressure_class}
+                        ½\u2033\u20132\u2033: ${vl.small_bore?.end_connection || 'Socket Weld / NPT'} &nbsp;|&nbsp;
+                        2½\u2033\u201336\u2033: ${vl.large_bore?.end_connection || 'Flanged RF'} &nbsp;|&nbsp;
+                        Pressure Class: #${vl.large_bore?.pressure_class || vl.small_bore?.pressure_class || ''}
                     </div>
                 </div>
             </div>
@@ -1698,11 +1732,16 @@ const App = {
                 `;
                 this.showToast('Excel PMS document generated successfully!', 'success');
             } else {
-                this.showToast('Failed to generate Excel file.', 'error');
+                const errMsg = result.error || 'Unknown error';
+                document.getElementById('download-status').innerHTML = `
+                    <div class="info-box" style="margin-top:15px;border-color:#c0392b;background:#fdecea">
+                        <strong>Generation failed:</strong> ${errMsg}
+                    </div>`;
+                this.showToast(`Excel generation failed: ${errMsg}`, 'error');
             }
         } catch (e) {
             console.error(e);
-            this.showToast('Error generating Excel file.', 'error');
+            this.showToast(`Error generating Excel file: ${e.message}`, 'error');
         }
         this.hideLoading();
     },

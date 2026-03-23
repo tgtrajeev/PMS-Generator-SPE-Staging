@@ -9,7 +9,10 @@
       "Bash(lsof -ti:8080)",
       "Bash(xargs kill:*)",
       "Bash(kill 54966)",
-      "Bash(kill 14976)"
+      "Bash(kill 14976)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" -X POST http://localhost:8000/api/select_valves -H \"Content-Type: application/json\" -d '{\"\"material_type\"\": \"\"CS\"\", \"\"flange_class\"\": 150, \"\"pipe_size\"\": \"\"1.5\"\", \"\"spec_code\"\": \"\"A1\"\", \"\"line_number\"\": \"\"\"\"}')",
+      "Bash(__NEW_LINE_68b703c52e67e936__ echo:*)",
+      "Bash(__NEW_LINE_68b703c52e67e936__ curl:*)"
     ]
   }
 }

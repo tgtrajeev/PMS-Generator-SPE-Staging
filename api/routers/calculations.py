@@ -387,7 +387,7 @@ async def full_schedule_table(req: FullScheduleTableRequest):
     })
 
     # ── 7. Per-NPS calculation ────────────────────────────────────────────────
-    nps_list = sorted(dim_table.keys(), key=lambda x: float(x))
+    nps_list = sorted([n for n in dim_table.keys() if float(n) <= 30], key=lambda x: float(x))
     rows     = []
     min_mawp = float("inf")
     max_mawp = 0.0
