@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  pms-generator:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    container_name: pms-generator
+    ports:
+      - "8080:8080"
+    volumes:
+      - ../output:/app/output
+      - pms-data:/app/data
+    environment:
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped
+
+volumes:
+  pms-data:

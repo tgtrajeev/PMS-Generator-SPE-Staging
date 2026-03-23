@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PMS Generator - Dashboard</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+
+<!-- Toast Notification Container -->
+<div id="toast-container" class="toast-container"></div>
+
+<!-- HEADER -->
+<header class="header">
+    <div class="header-content">
+        <h1>PMS <span>Generator</span></h1>
+        <div class="header-badges">
+            <span class="badge">Dashboard</span>
+            <a href="/" class="badge" style="text-decoration:none;background:rgba(255,255,255,0.25);cursor:pointer">New Spec</a>
+        </div>
+    </div>
+</header>
+
+<!-- MAIN CONTENT -->
+<div class="main-content" style="padding-top: 30px;">
+    <div class="card">
+        <div class="dashboard-header">
+            <div>
+                <h2 style="color: var(--primary); margin: 0;">Saved Specifications</h2>
+                <p style="color: var(--text-light); margin-top: 5px;">Manage your previously generated piping material specifications.</p>
+            </div>
+            <a href="/" class="btn btn-primary" style="text-decoration:none;">+ Create New Spec</a>
+        </div>
+
+        <!-- Search -->
+        <div class="search-box" style="margin: 20px 0;">
+            <input type="text" id="search-input" placeholder="Search by project name, spec code, or material..." oninput="Dashboard.filterSpecs(this.value)">
+        </div>
+
+        <!-- Stats Summary -->
+        <div id="stats-summary" class="summary-grid" style="margin-bottom: 20px;">
+            <div class="summary-panel" style="text-align:center">
+                <h4>Total Specs</h4>
+                <div id="stat-total" style="font-size:2rem;font-weight:700;color:var(--primary)">-</div>
+            </div>
+            <div class="summary-panel" style="text-align:center">
+                <h4>Carbon Steel</h4>
+                <div id="stat-cs" style="font-size:2rem;font-weight:700;color:#27ae60">-</div>
+            </div>
+            <div class="summary-panel" style="text-align:center">
+                <h4>Stainless Steel</h4>
+                <div id="stat-ss" style="font-size:2rem;font-weight:700;color:#2980b9">-</div>
+            </div>
+            <div class="summary-panel" style="text-align:center">
+                <h4>Other Alloys</h4>
+                <div id="stat-other" style="font-size:2rem;font-weight:700;color:#8e44ad">-</div>
+            </div>
+        </div>
+
+        <!-- Specs Table -->
+        <div id="specs-table-container">
+            <table class="specs-table" id="specs-table">
+                <thead>
+                    <tr>
+                        <th>Project</th>
+                        <th>Spec Code</th>
+                        <th>Material</th>
+                        <th>Flange Class</th>
+                        <th>C.A.</th>
+                        <th>Service</th>
+                        <th>Pressure / Temp</th>
+                        <th>Created</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="specs-tbody">
+                    <tr>
+                        <td colspan="7" style="text-align:center;color:var(--text-light);padding:40px;">
+                            Loading saved specifications...
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Empty State -->
+        <div id="empty-state" class="empty-state" style="display:none">
+            <div style="font-size:3rem;margin-bottom:15px;">📋</div>
+            <h3>No Saved Specifications</h3>
+            <p>You haven't generated any PMS documents yet. Create your first specification to get started.</p>
+            <a href="/" class="btn btn-primary" style="text-decoration:none;margin-top:15px;">Create First Spec</a>
+        </div>
+    </div>
+</div>
+
+<!-- Confirm Delete Modal -->
+<div id="delete-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;display:none;align-items:center;justify-content:center;">
+    <div class="card" style="max-width:400px;margin:auto;margin-top:20vh;">
+        <h3 style="color:#e74c3c;margin-bottom:10px;">Delete Specification?</h3>
+        <p id="delete-modal-text" style="margin-bottom:20px;">This action cannot be undone.</p>
+        <div class="btn-group">
+            <button class="btn btn-secondary" onclick="Dashboard.closeDeleteModal()">Cancel</button>
+            <button class="btn" style="background:#e74c3c;color:#fff;" onclick="Dashboard.confirmDelete()">Delete</button>
+        </div>
+    </div>
+</div>
+
+<script src="/static/js/dashboard.js"></script>
+</body>
+</html>

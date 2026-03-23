@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3:*)",
+      "Bash(pip install:*)",
+      "Bash(pip3 install:*)",
+      "Bash(curl:*)",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(lsof -ti:8080)",
+      "Bash(xargs kill:*)",
+      "Bash(kill 54966)",
+      "Bash(kill 14976)"
+    ]
+  }
+}

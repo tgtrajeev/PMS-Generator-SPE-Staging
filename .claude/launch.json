@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "pms-dev",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["main_api.py"],
+      "port": 8080
+    }
+  ]
+}

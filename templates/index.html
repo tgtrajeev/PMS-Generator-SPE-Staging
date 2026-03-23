@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PMS Generator - Piping Material Specification</title>
+    <link rel="stylesheet" href="/static/css/style.css?v=6">
+</head>
+<body>
+
+<!-- Toast Notification Container -->
+<div id="toast-container" class="toast-container"></div>
+
+<!-- HEADER -->
+<header class="header">
+    <div class="header-content">
+        <h1>PMS <span>Generator</span></h1>
+        <div class="header-badges">
+            <span class="badge">ASME B31.3</span>
+            <span class="badge">ASME B16.5</span>
+            <span class="badge">ASME B36.10/19</span>
+            <a href="/dashboard" class="badge" style="text-decoration:none;background:rgba(255,255,255,0.25);cursor:pointer">Dashboard</a>
+        </div>
+    </div>
+</header>
+
+<!-- STEPPER -->
+<div class="stepper-container">
+    <div class="stepper">
+        <div class="stepper-progress" style="width: 0%"></div>
+        <div class="step active">
+            <div class="step-circle"><span class="step-number">1</span></div>
+            <div class="step-label">Material</div>
+        </div>
+        <div class="step">
+            <div class="step-circle"><span class="step-number">2</span></div>
+            <div class="step-label">P-T Rating</div>
+        </div>
+        <div class="step">
+            <div class="step-circle"><span class="step-number">3</span></div>
+            <div class="step-label">Schedule &amp; WT</div>
+        </div>
+        <div class="step">
+            <div class="step-circle"><span class="step-number">4</span></div>
+            <div class="step-label">Fittings</div>
+        </div>
+        <div class="step">
+            <div class="step-circle"><span class="step-number">5</span></div>
+            <div class="step-label">Flanges &amp; Valves</div>
+        </div>
+        <div class="step">
+            <div class="step-circle"><span class="step-number">6</span></div>
+            <div class="step-label">Review</div>
+        </div>
+        <div class="step">
+            <div class="step-circle"><span class="step-number">7</span></div>
+            <div class="step-label">Final PMS</div>
+        </div>
+    </div>
+</div>
+
+<!-- MAIN CONTENT -->
+<div class="main-content">
+
+    <!-- STEP 1: Material Selection -->
+    <div id="step-1" class="step-section active">
+        <div class="card">
+            <div class="card-title">
+                <div class="icon">1</div>
+                Material Selection Report (MSR)
+            </div>
+            <p class="card-subtitle">Define project details, material type, and PMS code for your piping specification.</p>
+
+            <div class="form-grid" style="margin-bottom: 25px">
+                <div class="form-group">
+                    <label>Project Name</label>
+                    <input type="text" id="project-name" placeholder="e.g., Refinery Expansion Phase 2" value="PMS Project">
+                </div>
+                <div class="form-group">
+                    <label>Document Number</label>
+                    <input type="text" id="doc-number" placeholder="e.g., PMS-001" value="PMS-001">
+                </div>
+                <div class="form-group">
+                    <label>Revision</label>
+                    <input type="text" id="revision" placeholder="0" value="0">
+                </div>
+            </div>
+
+            <h3 style="color: var(--primary); margin-bottom: 15px;">PMS Code Selection</h3>
+            <div class="form-grid">
+                <div class="form-group">
+                    <label>Pressure Rating</label>
+                    <select id="pms-part1" onchange="App.onPMSPart1Change()">
+                        <option value="" disabled selected>Please select Pressure Rating</option>
+                    </select>
+                    <div id="pms-part1-hint" class="form-hint"></div>
+                </div>
+                <div class="form-group">
+                    <label>Material Type</label>
+                    <select id="pms-material" onchange="App.onPMSMaterialChange()">
+                        <option value="" disabled selected>Please select Material Type</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Corrosion Allowance</label>
+                    <select id="pms-ca" onchange="App.onPMSPartChange()">
+                        <option value="" disabled selected>Please select CA</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Service</label>
+                    <input type="text" id="fluid-service" placeholder="Please enter service" value="">
+                </div>
+                <div class="form-group" id="part3-section">
+                    <!-- Non-tubing: Two checkboxes for L and N -->
+                    <div id="part3-checkboxes">
+                        <label style="font-weight:600;">Optional Identifiers</label>
+                        <div style="display:flex;gap:20px;margin-top:8px;">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="opt-low-temp" onchange="App.onPart3Change()">
+                                Low Temperature (L)
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="opt-nace" onchange="App.onPart3Change()">
+                                NACE Service (N)
+                            </label>
+                        </div>
+                    </div>
+                    <!-- Tubing: Radio buttons for A/B/C -->
+                    <div id="part3-tubing" style="display:none;">
+                        <label style="font-weight:600;">Tubing Pressure</label>
+                        <div style="display:flex;gap:20px;margin-top:8px;flex-wrap:wrap;">
+                            <label class="radio-label">
+                                <input type="radio" name="tubing-pressure" value="" checked onchange="App.onPart3Change()"> None
+                            </label>
+                            <label class="radio-label">
+                                <input type="radio" name="tubing-pressure" value="A" onchange="App.onPart3Change()"> A &mdash; 125 Barg
+                            </label>
+                            <label class="radio-label">
+                                <input type="radio" name="tubing-pressure" value="B" onchange="App.onPart3Change()"> B &mdash; 200 Barg
+                            </label>
+                            <label class="radio-label">
+                                <input type="radio" name="tubing-pressure" value="C" onchange="App.onPart3Change()"> C &mdash; 325 Barg
+                            </label>
+                        </div>
+                    </div>
+                    <div id="pms-part3-hint" class="form-hint"></div>
+                </div>
+            </div>
+
+            <div id="ca-advisory-box" class="info-box" style="display:none; margin-top:15px; border-color:#f39c12; background:#fef9e7;"></div>
+
+            <!-- Design conditions are auto-derived from PMS inputs (Pressure Rating, Material, CA, Low Temp, NACE) -->
+
+            <!-- Live PMS Code Display -->
+            <div id="pms-code-display" style="text-align:center; background:#e8f4fd; border-radius:10px; margin:20px 0; padding:24px;">
+                <h4 style="margin-bottom:8px; color:var(--text-light)">Generated PMS Code</h4>
+                <div id="pms-code-value" style="font-size:2.2rem; font-weight:bold; color:#1a5276; letter-spacing:3px; font-family:'Courier New',monospace;">--</div>
+                <div id="pms-code-description" style="margin-top:8px; color:#555; font-size:0.95rem;"></div>
+                <div id="pms-code-reference" style="margin-top:4px; color:var(--primary); font-weight:500;"></div>
+            </div>
+
+            <!-- Validation Panel -->
+            <div id="pms-validation-panel" style="margin-bottom:15px"></div>
+
+            <!-- Material ID Table -->
+            <div id="material-id-table" style="display:none; margin-bottom:15px;">
+                <h4 style="color:var(--primary); margin-bottom:10px;">Material Summary</h4>
+                <table class="result-table">
+                    <thead><tr><th>Material ID</th><th>PMS Code</th><th>Material Type</th><th>Description</th><th>CA</th><th>Service</th></tr></thead>
+                    <tbody id="material-id-tbody"></tbody>
+                </table>
+            </div>
+
+            <!-- Suggestion Panel -->
+            <div id="pms-suggestions-panel" style="display:none; margin-bottom:15px;">
+                <h4 style="color:var(--primary); margin-bottom:10px;">Alternative Suggestions</h4>
+                <div id="pms-suggestions-list" style="display:flex; flex-wrap:wrap; gap:8px;"></div>
+            </div>
+
+            <div class="btn-group">
+                <div></div>
+                <button class="btn btn-primary" id="pms-next-btn" onclick="App.nextStep()">
+                    Next: P-T Rating &rarr;
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- STEP 2: Pressure-Temperature Rating -->
+    <div id="step-2" class="step-section">
+        <div class="card">
+            <div class="card-title">
+                <div class="icon">2</div>
+                Pressure&ndash;Temperature Rating
+            </div>
+            <p class="card-subtitle">Flange P-T rating per ASME B16.5 / API 6A based on selected pressure class and material.</p>
+
+            <!-- Actual Design Conditions Input -->
+            <div style="background:#f8f9fa;border:1px solid #dee2e6;border-radius:8px;padding:18px;margin-bottom:20px;">
+                <h4 style="margin:0 0 6px;color:var(--primary)">&#9998; Actual Process Design Conditions</h4>
+                <p style="font-size:0.84rem;color:var(--text-light);margin:0 0 14px;">Enter the actual process design conditions for this piping class. These are used for wall thickness, schedule, and flange adequacy calculations.</p>
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label>Design Pressure (barg) <span style="color:#c0392b">*</span></label>
+                        <input type="number" id="input-design-pressure" step="0.1" min="0.1" placeholder="e.g. 10.0" oninput="App.onDesignConditionsChange()">
+                        <div class="form-hint" id="dp-psig-hint">Enter a value to continue</div>
+                    </div>
+                    <div class="form-group">
+                        <label>Design Temperature (&deg;C) <span style="color:#c0392b">*</span></label>
+                        <input type="number" id="input-design-temp" step="1" placeholder="e.g. 100" oninput="App.onDesignConditionsChange()">
+                        <div class="form-hint" id="dt-f-hint">Enter a value to continue</div>
+                    </div>
+                    <div class="form-group">
+                        <label>Min Design Metal Temp &mdash; MDMT (&deg;C)</label>
+                        <input type="number" id="input-mdmt" step="1" placeholder="e.g. -29" oninput="App.onDesignConditionsChange()">
+                        <div class="form-hint" id="mdmt-f-hint">&nbsp;</div>
+                    </div>
+                    <div class="form-group">
+                        <label>Joint Type</label>
+                        <select id="input-joint-type" onchange="App.onDesignConditionsChange()">
+                            <option value="seamless" selected>Seamless (E = 1.0)</option>
+                            <option value="erw">ERW / Welded (E = 0.85)</option>
+                            <option value="furnace_butt">Furnace Butt (E = 0.60)</option>
+                        </select>
+                        <div class="form-hint" id="joint-e-hint">ASME B31.3 Table A-1B</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Step 1 Summary Panel -->
+            <div id="step1-summary-panel"></div>
+
+            <!-- Derived Design Conditions -->
+            <div id="derived-design-panel"></div>
+
+            <!-- P-T Rating Table (results only) -->
+            <div id="pt-rating-section">
+                <div id="pt-rating-result"></div>
+            </div>
+
+            <div class="btn-group">
+                <button class="btn btn-secondary" onclick="App.prevStep()">&larr; Back</button>
+                <button class="btn btn-primary" onclick="App.nextStep()">Next: Schedule &amp; WT &rarr;</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- STEP 3: Schedule & Wall Thickness Table -->
+    <div id="step-3" class="step-section">
+        <div class="card">
+            <div class="card-title">
+                <div class="icon">3</div>
+                Schedule &amp; Wall Thickness (ASME B31.3)
+            </div>
+            <p class="card-subtitle">Minimum wall thickness per ASME B31.3 Eq. 3a &amp; schedule selection per ASME B36.10M / B36.19M for all NPS sizes.</p>
+
+            <div id="schedule-table-result">
+                <p style="color: var(--text-light)">Calculating...</p>
+            </div>
+
+            <div class="btn-group">
+                <button class="btn btn-secondary" onclick="App.prevStep()">&larr; Back</button>
+                <button class="btn btn-primary" onclick="App.nextStep()">Next: Fittings &rarr;</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- STEP 4: Fittings -->
+    <div id="step-4" class="step-section">
+        <div class="card">
+            <div class="card-title">
+                <div class="icon">4</div>
+                Pipe &amp; Fittings Material Assignment
+            </div>
+            <p class="card-subtitle">Material codes assigned for pipes, elbows, tees, reducers, and branch fittings per specification.</p>
+
+            <div id="fittings-result">
+                <p style="color: var(--text-light)">Loading...</p>
+            </div>
+
+            <div class="btn-group">
+                <button class="btn btn-secondary" onclick="App.prevStep()">&larr; Back</button>
+                <button class="btn btn-primary" onclick="App.nextStep()">Next: Flanges &amp; Valves &rarr;</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- STEP 5: Flanges, Gaskets, Bolting & Valves -->
+    <div id="step-5" class="step-section">
+        <div class="card">
+            <div class="card-title">
+                <div class="icon">5</div>
+                Flanges, Gaskets, Bolting &amp; Valves
+            </div>
+            <p class="card-subtitle">Flange rating per ASME B16.5, gasket &amp; bolting selection, and valve material assignment.</p>
+
+            <div id="flanges-result">
+                <p style="color: var(--text-light)">Loading...</p>
+            </div>
+
+            <div class="btn-group">
+                <button class="btn btn-secondary" onclick="App.prevStep()">&larr; Back</button>
+                <button class="btn btn-primary" onclick="App.nextStep()">Next: Review &amp; Validate &rarr;</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- STEP 6: Review & Validate -->
+    <div id="step-6" class="step-section">
+        <div class="card">
+            <div class="card-title">
+                <div class="icon">6</div>
+                Review &amp; Validate
+            </div>
+            <p class="card-subtitle">Review all selections and run engineering validation checks before generating the final PMS.</p>
+
+            <div id="review-summary">
+                <p style="color: var(--text-light)">Loading review...</p>
+            </div>
+
+            <div id="validation-results" style="margin-top: 25px;">
+                <h3 style="color: var(--primary); margin-bottom: 15px;">Engineering Validation</h3>
+                <div class="validation-list">
+                    <p style="color: var(--text-light)">Running validation checks...</p>
+                </div>
+            </div>
+
+            <div class="btn-group">
+                <button class="btn btn-secondary" onclick="App.prevStep()">&larr; Back to Edit</button>
+                <button class="btn btn-primary" onclick="App.nextStep()">Generate Final PMS &rarr;</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- STEP 7: Final PMS -->
+    <div id="step-7" class="step-section">
+        <div class="card">
+            <div class="card-title">
+                <div class="icon">&#10003;</div>
+                Final PMS Document
+            </div>
+            <p class="card-subtitle">Complete Piping Material Specification - Project-specific, code-compliant document.</p>
+
+            <div id="pms-preview">
+                <p style="color: var(--text-light)">Generating PMS preview...</p>
+            </div>
+
+            <div class="download-section">
+                <h3>Download PMS Document</h3>
+                <p>Export the complete PMS as a formatted Excel spreadsheet.</p>
+                <button class="btn btn-success" onclick="App.downloadExcel()" style="display:inline-flex; font-size:1.05rem; padding:14px 35px;">
+                    Download Excel (.xlsx)
+                </button>
+                <div id="download-status"></div>
+            </div>
+
+            <div class="btn-group">
+                <button class="btn btn-secondary" onclick="App.prevStep()">&larr; Back to Edit</button>
+                <button class="btn btn-accent" onclick="location.reload()">Start New PMS</button>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<!-- LOADING OVERLAY -->
+<div id="loading-overlay" class="loading-overlay">
+    <div class="spinner"></div>
+    <div class="loading-text">Processing...</div>
+</div>
+
+<script src="/static/js/app.js?v=27"></script>
+</body>
+</html>
