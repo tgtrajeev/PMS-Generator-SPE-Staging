@@ -5,11 +5,13 @@ Replaces Flask app.py with async endpoints, Pydantic validation, and auto-docs.
 
 import os
 import sys
+import traceback
 
 # Ensure project root is in path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
@@ -19,14 +21,18 @@ from db.seed import seed_all
 
 from api.routers import materials, calculations, components, pms, specs, validation
 
-# Create tables
-Base.metadata.create_all(bind=engine)
+# Create tables, run migrations, and seed — all wrapped so startup never crashes
+try:
+    Base.metadata.create_all(bind=engine)
+except Exception as _e:
+    print(f"[startup] create_all failed: {_e}", flush=True)
 
-# Run column migrations (adds new columns to existing DB without data loss)
-run_migrations()
+try:
+    run_migrations()
+except Exception as _e:
+    print(f"[startup] run_migrations failed: {_e}", flush=True)
 
-# Seed database on first run
-seed_all()
+seed_all()  # already has its own internal try/except
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -58,6 +64,16 @@ app.include_router(components.router, prefix="/api", tags=["Components"])
 app.include_router(pms.router, prefix="/api", tags=["PMS Generation"])
 app.include_router(specs.router, prefix="/api", tags=["Saved Specs"])
 app.include_router(validation.router, prefix="/api", tags=["Validation"])
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    tb = traceback.format_exc()
+    print(f"[UNHANDLED ERROR] {request.method} {request.url}\n{tb}", flush=True)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": str(exc), "traceback": tb},
+    )
 
 
 @app.get("/")
