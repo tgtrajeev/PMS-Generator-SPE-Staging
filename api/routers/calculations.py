@@ -23,6 +23,7 @@ from src.pms_code_module import (
     auto_suggest_part1, auto_suggest_part2, auto_suggest_part3,
     validate_pms_code, generate_pms_code, get_suggestions,
 )
+from src.pms_generator import determine_pipe_type
 
 router = APIRouter()
 
@@ -535,6 +536,11 @@ async def full_schedule_table(req: FullScheduleTableRequest):
         if not tags:
             tags.append("Pressure")
 
+        # Pipe type determination (Seamless / LSAW / LSAW, 100% RT)
+        pipe_type = determine_pipe_type(
+            nps, service=req.service, is_nace=req.is_nace, is_critical=False
+        )
+
         rows.append({
             "nps":        nps,
             "od_mm":      od_mm,
@@ -550,6 +556,7 @@ async def full_schedule_table(req: FullScheduleTableRequest):
             "status":     status,
             "governs":    governs,
             "tags":       tags,
+            "pipe_type":  pipe_type,
         })
 
     return {

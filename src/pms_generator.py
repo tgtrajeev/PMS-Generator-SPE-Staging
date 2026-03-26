@@ -40,8 +40,45 @@ STANDARD_NPS_SIZES = [
     "12", "14", "16", "18", "20", "22", "24", "26", "28", "30"
 ]
 
-# Seamless pipe split point: NPS >= this value use welded pipe (EFW)
-SEAMLESS_SPLIT_NPS = 18  # Column index in STANDARD_NPS_SIZES where welded starts
+# ── Pipe Type Selection (per ASME B31.3 & PMS practice) ──────────
+# Rules:
+#   NPS ≤ 10"  → "Seamless"
+#   NPS ≥ 12"  → "LSAW" (default), upgrade to "LSAW, 100% RT" for:
+#                 - NACE / sour / critical service
+#                 - Hydrocarbon / Gas / Hazardous service
+#   NPS ≤ 3" always Seamless regardless of service
+SEAMLESS_SPLIT_NPS = 12  # NPS at which welded pipe starts (for MOC split)
+
+_HC_KEYWORDS = ["hydrocarbon", "hc ", "gas", "hazardous", "flammable",
+                "fuel", "diesel", "crude", "naphtha", "lpg", "lng"]
+_SOUR_KEYWORDS = ["sour", "h2s", "sulfide", "nace"]
+
+
+def determine_pipe_type(nps_str, service="", is_nace=False, is_critical=False):
+    """Determine pipe type per ASME B31.3 & industry PMS rules.
+    Returns one of: 'Seamless', 'LSAW', 'LSAW, 100% RT'
+    """
+    nps_f = float(nps_str)
+    svc = (service or "").lower()
+
+    # Rule 1: Size-based
+    if nps_f <= 10:
+        return "Seamless"
+
+    # NPS >= 12" default is LSAW
+    pipe_type = "LSAW"
+
+    # Rule 2: Service override — HC / Gas / Hazardous → LSAW, 100% RT
+    if any(k in svc for k in _HC_KEYWORDS):
+        pipe_type = "LSAW, 100% RT"
+
+    # Rule 3: NACE / Sour / Critical override → LSAW, 100% RT
+    if is_nace or is_critical:
+        pipe_type = "LSAW, 100% RT"
+    if any(k in svc for k in _SOUR_KEYWORDS):
+        pipe_type = "LSAW, 100% RT"
+
+    return pipe_type
 
 # ── Material mappings for NACE / Low Temp / Standard service ──────
 
@@ -307,18 +344,27 @@ def generate_pms_excel(pms_data, output_dir):
     schedule_rows = sched.get("schedule_rows", [])
     schedule_by_nps = {str(r["nps"]): r for r in schedule_rows} if schedule_rows else {}
 
+    # Service info for pipe type determination
+    service_desc = (
+        pms_data.get("service", {}).get("service_description", "")
+        or line.get("fluid", "")
+        or msr.get("fluid_service", "")
+    )
+    is_critical = bool(pms_data.get("service", {}).get("is_critical", False))
+
     pipe_sizes = []
     dim_table = PIPE_DIMENSIONS_B36_19 if material_type == "SS" else PIPE_DIMENSIONS_B36_10
     for nps in STANDARD_NPS_SIZES:
         # Use exact metric OD from standard table (avoids rounding errors from in→mm)
         od_mm = STANDARD_OD_MM.get(nps, "-")
+        pipe_type = determine_pipe_type(nps, service=service_desc, is_nace=is_nace, is_critical=is_critical)
         if nps in schedule_by_nps:
             r = schedule_by_nps[nps]
-            pipe_sizes.append({"nps": nps, "od_mm": od_mm, "schedule": r.get("schedule", "-"), "wt_mm": r.get("wt_mm", "-")})
+            pipe_sizes.append({"nps": nps, "od_mm": od_mm, "schedule": r.get("schedule", "-"), "wt_mm": r.get("wt_mm", "-"), "pipe_type": pipe_type})
         elif nps in dim_table:
-            pipe_sizes.append({"nps": nps, "od_mm": od_mm, "schedule": "-", "wt_mm": "-"})
+            pipe_sizes.append({"nps": nps, "od_mm": od_mm, "schedule": "-", "wt_mm": "-", "pipe_type": pipe_type})
         else:
-            pipe_sizes.append({"nps": nps, "od_mm": od_mm, "schedule": "-", "wt_mm": "-"})
+            pipe_sizes.append({"nps": nps, "od_mm": od_mm, "schedule": "-", "wt_mm": "-", "pipe_type": pipe_type})
 
     SC = 2  # size start column (B)
 
@@ -493,19 +539,32 @@ def generate_pms_excel(pms_data, output_dir):
     for i, ps in enumerate(pipe_sizes):
         wc(15, SC + i, ps["wt_mm"])
 
-    # Row 16: TYPE (Seamless up to split, EFW after)
+    # Row 16: TYPE — per-NPS pipe type (Seamless / LSAW / LSAW, 100% RT)
     wc(16, 1, "TYPE")
-    mw(16, SC, split_col - 1, "Seamless")
-    if split_col <= LAST_COL:
-        mw(16, split_col, LAST_COL, "EFW, 100% RT")
+    # Group consecutive NPS sizes with the same pipe type into merged ranges
+    i = 0
+    while i < len(pipe_sizes):
+        ptype = pipe_sizes[i]["pipe_type"]
+        j = i
+        while j < len(pipe_sizes) and pipe_sizes[j]["pipe_type"] == ptype:
+            j += 1
+        mw(16, SC + i, SC + j - 1, ptype)
+        i = j
 
     # Row 17: MOC (different materials for seamless vs welded)
     wc(17, 1, "MOC")
     moc_smls = PIPE_MOC_SEAMLESS.get(eff_mat, f"ASTM {msr.get('material_grade', '')}")
     moc_weld = PIPE_MOC_WELDED.get(eff_mat, moc_smls)
-    mw(17, SC, split_col - 1, moc_smls)
-    if split_col <= LAST_COL:
-        mw(17, split_col, LAST_COL, moc_weld)
+    # Group by Seamless vs LSAW MOC (same logic as pipe type split)
+    i = 0
+    while i < len(pipe_sizes):
+        is_seamless = pipe_sizes[i]["pipe_type"] == "Seamless"
+        moc = moc_smls if is_seamless else moc_weld
+        j = i
+        while j < len(pipe_sizes) and (pipe_sizes[j]["pipe_type"] == "Seamless") == is_seamless:
+            j += 1
+        mw(17, SC + i, SC + j - 1, moc)
+        i = j
 
     # Row 18: Ends
     wc(18, 1, "Ends")
@@ -519,11 +578,17 @@ def generate_pms_excel(pms_data, output_dir):
     for c in range(2, LAST_COL + 1):
         ws.cell(row=19, column=c).fill = fill_section
 
-    # Row 20: TYPE
+    # Row 20: TYPE (Fittings — Seamless vs Welded matching pipe type)
     wc(20, 1, "TYPE")
-    mw(20, SC, split_col - 1, "Butt Weld (SCH to match pipe), Seamless")
-    if split_col <= LAST_COL:
-        mw(20, split_col, LAST_COL, "Butt Weld (SCH to match pipe), Welded")
+    i = 0
+    while i < len(pipe_sizes):
+        is_seamless = pipe_sizes[i]["pipe_type"] == "Seamless"
+        fit_type = "Butt Weld (SCH to match pipe), Seamless" if is_seamless else "Butt Weld (SCH to match pipe), Welded"
+        j = i
+        while j < len(pipe_sizes) and (pipe_sizes[j]["pipe_type"] == "Seamless") == is_seamless:
+            j += 1
+        mw(20, SC + i, SC + j - 1, fit_type)
+        i = j
 
     # Row 21: MOC
     fit_moc = FITTING_MOC.get(eff_mat, "N/A")
