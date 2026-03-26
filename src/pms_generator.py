@@ -42,12 +42,11 @@ STANDARD_NPS_SIZES = [
 
 # ── Pipe Type Selection (per ASME B31.3 & PMS practice) ──────────
 # Rules:
-#   NPS ≤ 10"  → "Seamless"
-#   NPS ≥ 12"  → "LSAW" (default), upgrade to "LSAW, 100% RT" for:
+#   NPS ≤ 18"  → "Seamless"
+#   NPS ≥ 20"  → "LSAW" (default), upgrade to "LSAW, 100% RT" for:
 #                 - NACE / sour / critical service
 #                 - Hydrocarbon / Gas / Hazardous service
-#   NPS ≤ 3" always Seamless regardless of service
-SEAMLESS_SPLIT_NPS = 12  # NPS at which welded pipe starts (for MOC split)
+SEAMLESS_SPLIT_NPS = 20  # NPS at which welded pipe starts
 
 _HC_KEYWORDS = ["hydrocarbon", "hc ", "gas", "hazardous", "flammable",
                 "fuel", "diesel", "crude", "naphtha", "lpg", "lng"]
@@ -61,11 +60,11 @@ def determine_pipe_type(nps_str, service="", is_nace=False, is_critical=False):
     nps_f = float(nps_str)
     svc = (service or "").lower()
 
-    # Rule 1: Size-based
-    if nps_f <= 10:
+    # Rule 1: Size-based — Seamless up to NPS 18"
+    if nps_f <= 18:
         return "Seamless"
 
-    # NPS >= 12" default is LSAW
+    # NPS >= 20" default is LSAW
     pipe_type = "LSAW"
 
     # Rule 2: Service override — HC / Gas / Hazardous → LSAW, 100% RT
