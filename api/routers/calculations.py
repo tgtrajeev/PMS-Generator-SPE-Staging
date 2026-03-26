@@ -407,51 +407,78 @@ async def full_schedule_table(req: FullScheduleTableRequest):
         # Minimum ordered thickness: add CA + mech allowance, account for mill tolerance
         t_min_calc_in = (t_req_in + c_in + m_in) / (1.0 - mill_tol)
 
-        # Service/NACE minimum schedule
-        min_svc_wt_in = 0.0
-        min_svc_sch   = None
+        # ── PMS Standardization: base minimum schedule by NPS range ──
         governs       = "Pressure (ASME B31.3 Eq. 3a)"
+        sorted_scheds = sorted(schedules.items(), key=lambda x: x[1])
 
+        # Layer 1 — Base minimum schedule (ALWAYS applied per PMS standardization)
+        base_min_wt_in = 0.0
+        base_min_sch   = None
+        base_label     = ""
+
+        if nps_f <= 1.5:
+            # NPS ≤ 1½" → minimum Sch 160
+            wt = schedules.get("160", schedules.get("XXS", 0))
+            if wt > 0:
+                base_min_wt_in, base_min_sch = wt, "160"
+                base_label = 'Sch 160 (NPS \u2264 1\u00bd")'
+        elif nps_f <= 6.0:
+            # 2" ≤ NPS ≤ 6" → minimum Sch 80
+            wt = schedules.get("80", schedules.get("80S", schedules.get("XS", 0)))
+            if wt > 0:
+                base_min_wt_in, base_min_sch = wt, "80"
+                base_label = 'Sch 80 (NPS 2"\u20136")'
+        elif nps_f >= 8.0:
+            # NPS ≥ 8" → STD (Standard Wall)
+            wt = schedules.get("Std", schedules.get("40", 0))
+            if wt > 0:
+                base_min_wt_in, base_min_sch = wt, "Std"
+                base_label = 'STD (NPS \u2265 8")'
+
+        # Layer 2 — Service / CA bumps (increase one schedule from base)
+        bump_reasons = []
         if has_svc_min:
-            if nps_f <= 1.5:
-                wt_160 = schedules.get("160", 0)
-                wt_xxs = schedules.get("XXS", 0)
-                if wt_160 > 0:
-                    min_svc_wt_in, min_svc_sch = wt_160, "160"
-                elif wt_xxs > 0:
-                    min_svc_wt_in, min_svc_sch = wt_xxs, "XXS"
-            elif nps_f >= 2.0:
-                wt_xs = schedules.get("XS", schedules.get("80", 0))
-                if wt_xs > 0:
-                    min_svc_wt_in, min_svc_sch = wt_xs, "XS"
+            src = "NACE MR0175" if (req.is_nace or is_sour) else ("LTCS" if req.is_low_temp else "Corrosive service")
+            bump_reasons.append(src)
+        if c_in * 25.4 > 3.0:
+            bump_reasons.append("CA > 3 mm")
 
-        t_min_in = max(t_min_calc_in, min_svc_wt_in)
+        if bump_reasons and base_min_sch:
+            # Find the schedule one step heavier than the base minimum
+            for i, (sch, wt) in enumerate(sorted_scheds):
+                if sch == base_min_sch and i + 1 < len(sorted_scheds):
+                    base_min_wt_in = sorted_scheds[i + 1][1]
+                    base_min_sch   = sorted_scheds[i + 1][0]
+                    break
+
+        # Layer 3 — Select schedule: PMS minimum or pressure, whichever is heavier
+        t_min_in = max(t_min_calc_in, base_min_wt_in)
         t_min_mm = round(t_min_in * 25.4, 2)
 
-        # Select minimum schedule that satisfies t_min_in
-        sorted_scheds = sorted(schedules.items(), key=lambda x: x[1])
         sel_sch, sel_wt_in = None, None
 
-        for sch, wt in sorted_scheds:
-            if wt >= t_min_in:
-                sel_sch, sel_wt_in = sch, wt
-                break
-
-        if sel_sch is None and sorted_scheds:
-            sel_sch, sel_wt_in = sorted_scheds[-1]   # heaviest available
-
-        # Enforce service minimum label
-        if has_svc_min and min_svc_sch and min_svc_wt_in > 0 and sel_wt_in is not None:
-            if sel_wt_in < min_svc_wt_in:
-                sel_sch, sel_wt_in = min_svc_sch, min_svc_wt_in
-                src = "NACE MR0175" if (req.is_nace or is_sour) else ("LTCS" if req.is_low_temp else "Service rules")
-                governs = f"Service minimum — {min_svc_sch} ({src})"
-            elif abs(sel_wt_in - min_svc_wt_in) < 0.001:
-                sel_sch = min_svc_sch
-                src = "NACE MR0175" if (req.is_nace or is_sour) else ("LTCS" if req.is_low_temp else "Service rules")
-                governs = f"Service minimum — {min_svc_sch} ({src})"
+        if base_min_wt_in > 0 and base_min_wt_in >= t_min_calc_in:
+            # PMS minimum governs — use PMS schedule label directly
+            sel_sch, sel_wt_in = base_min_sch, base_min_wt_in
+            if bump_reasons:
+                governs = f"PMS minimum — {base_min_sch} ({base_label} + {' + '.join(bump_reasons)})"
             else:
-                governs = "Pressure (exceeds service minimum)"
+                governs = f"PMS minimum — {base_label}"
+        else:
+            # Pressure governs — find lightest schedule that meets t_min
+            # Prefer named schedules (Std, XS) over numeric when WT is identical
+            for sch, wt in sorted_scheds:
+                if wt >= t_min_in:
+                    sel_sch, sel_wt_in = sch, wt
+                    # Check if a named schedule (Std/XS) has the same WT
+                    for named in ("Std", "XS"):
+                        if named != sch and named in schedules and abs(schedules[named] - wt) < 0.001:
+                            sel_sch = named
+                    break
+            if sel_sch is None and sorted_scheds:
+                sel_sch, sel_wt_in = sorted_scheds[-1]
+            if base_min_wt_in > 0:
+                governs = "Pressure (exceeds PMS minimum)"
 
         # Hydrogen service: bump one schedule heavier for conservatism
         if is_hydrogen and sel_sch is not None:
@@ -491,9 +518,11 @@ async def full_schedule_table(req: FullScheduleTableRequest):
 
         # Build remark tags for this NPS row
         tags = []
-        if "Service minimum" in governs or "NACE" in governs:
+        if "PMS minimum" in governs or "NACE" in governs:
             if req.is_nace or is_sour: tags.append("NACE")
             if req.is_low_temp:        tags.append("LTCS")
+            if "CA > 3" in governs:    tags.append("CA↑")
+            if not tags:               tags.append("PMS min")
         if is_hydrogen and "Hydrogen" in governs:
             tags.append("H₂↑")
         if status == "FAIL":
