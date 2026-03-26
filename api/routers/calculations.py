@@ -399,13 +399,15 @@ async def full_schedule_table(req: FullScheduleTableRequest):
         od_mm   = round(od_in * 25.4, 1)
         nps_f   = float(nps)
 
-        # ASME B31.3 Eq. 3a: t_req = (P × D) / (2 × (S × E × W + P × Y))
-        denom    = 2.0 * (S * E * W + P * Y)
-        t_req_in = (P * od_in) / denom if denom > 0 else 0.0
-        t_req_mm = round(t_req_in * 25.4, 3)
+        # ── User-specified ASME B31.3 formula ──────────────────────────
+        # Step 1: t_min = (P × OD) / (2 × (S + P × Y)) + CA
+        denom    = 2.0 * (S + P * Y)
+        t_calc_in = (P * od_in) / denom if denom > 0 else 0.0
+        t_min_in_raw = t_calc_in + c_in   # add corrosion allowance
+        t_req_mm = round(t_calc_in * 25.4, 3)
 
-        # Minimum ordered thickness: add CA + mech allowance, account for mill tolerance
-        t_min_calc_in = (t_req_in + c_in + m_in) / (1.0 - mill_tol)
+        # Step 2: t_design = t_min / (1 - 0.125)  (mill tolerance)
+        t_min_calc_in = t_min_in_raw / (1.0 - mill_tol)
 
         # ── PMS Standardization: base minimum schedule by NPS range ──
         governs       = "Pressure (ASME B31.3 Eq. 3a)"
@@ -497,9 +499,9 @@ async def full_schedule_table(req: FullScheduleTableRequest):
         t_eff_in  = sel_wt_in * (1.0 - mill_tol) - c_in - m_in
         t_eff_mm  = round(t_eff_in * 25.4, 2)
 
-        # MAWP back-calculation per ASME B31.3 (rearranged Eq. 3a)
+        # MAWP back-calculation (rearranged: P = 2×S×t / (OD - 2×Y×t))
         if t_eff_in > 0 and (od_in - 2.0 * Y * t_eff_in) > 0:
-            mawp_psig = (2.0 * S * E * W * t_eff_in) / (od_in - 2.0 * Y * t_eff_in)
+            mawp_psig = (2.0 * S * t_eff_in) / (od_in - 2.0 * Y * t_eff_in)
             mawp_barg = round(mawp_psig * 0.0689476, 1)
         else:
             mawp_psig = 0.0
