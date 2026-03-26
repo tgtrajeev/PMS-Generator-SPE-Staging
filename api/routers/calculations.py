@@ -188,7 +188,7 @@ async def full_schedule_table(req: FullScheduleTableRequest):
     # ── 5. Service classification ─────────────────────────────────────────────
     svc = (req.service or "").lower()
     is_sour     = any(k in svc for k in ["sour", "h2s", "sulfide"])
-    is_hydrogen = any(k in svc for k in ["hydrogen", " h2 ", "h2/", "h2s"])
+    is_hydrogen = any(k in svc for k in ["hydrogen", " h2 ", "h2/"])  # h2s is sour, NOT hydrogen
     is_steam    = any(k in svc for k in ["steam", "condensate"])
     is_acid     = any(k in svc for k in ["acid", "amine", "caustic", "hcl", "h2so4"])
     is_cyclic   = any(k in svc for k in ["cyclic", "fatigue", "pulsating"])
@@ -485,7 +485,8 @@ async def full_schedule_table(req: FullScheduleTableRequest):
                 governs = "Pressure (exceeds PMS minimum)"
 
         # Hydrogen service: bump one schedule heavier for conservatism
-        if is_hydrogen and sel_sch is not None:
+        # Skip for NPS ≤ 1.5" (Sch 160 is already the maximum practical small-bore schedule)
+        if is_hydrogen and sel_sch is not None and nps_f > 1.5:
             for i, (sch, wt) in enumerate(sorted_scheds):
                 if sch == sel_sch and i + 1 < len(sorted_scheds):
                     sel_sch, sel_wt_in = sorted_scheds[i + 1]
