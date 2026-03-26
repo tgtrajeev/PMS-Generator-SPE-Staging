@@ -974,6 +974,11 @@ const App = {
                 }),
             });
             this._fullScheduleData = await res.json();
+            // DEBUG: log API response
+            console.log('[Step3] API response rows:');
+            (this._fullScheduleData.rows || []).forEach(r => {
+                console.log(`  NPS ${r.nps}: Sch=${r.schedule}, WT=${r.wt_nom_mm}mm`);
+            });
             this.renderFullScheduleTable();
 
             // Store thickness/schedule data for downstream steps (fittings, etc.)
@@ -1716,6 +1721,11 @@ const App = {
                 },
             };
 
+            // DEBUG: log what schedule_rows are being sent to Excel generator
+            console.log('[Excel] schedule_rows being sent:');
+            (pmsData.schedule?.schedule_rows || []).forEach(r => {
+                console.log(`  NPS ${r.nps}: Sch=${r.schedule}, WT=${r.wt_mm}mm`);
+            });
             const res = await fetch('/api/generate_pms', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },

@@ -438,6 +438,8 @@ async def full_schedule_table(req: FullScheduleTableRequest):
                 base_label = 'STD (NPS \u2265 8")'
 
         # Layer 2 — Service / CA bumps (increase one schedule from base)
+        # NOTE: NPS ≤ 1.5" already uses Sch 160 (maximum practical small-bore schedule)
+        #        — no further bump applied; XXS is not standard PMS practice.
         bump_reasons = []
         if has_svc_min:
             src = "NACE MR0175" if (req.is_nace or is_sour) else ("LTCS" if req.is_low_temp else "Corrosive service")
@@ -445,8 +447,8 @@ async def full_schedule_table(req: FullScheduleTableRequest):
         if c_in * 25.4 > 3.0:
             bump_reasons.append("CA > 3 mm")
 
-        if bump_reasons and base_min_sch:
-            # Find the schedule one step heavier than the base minimum
+        if bump_reasons and base_min_sch and nps_f > 1.5:
+            # Only bump for NPS > 1.5" (small bore Sch 160 is already the cap)
             for i, (sch, wt) in enumerate(sorted_scheds):
                 if sch == base_min_sch and i + 1 < len(sorted_scheds):
                     base_min_wt_in = sorted_scheds[i + 1][1]
