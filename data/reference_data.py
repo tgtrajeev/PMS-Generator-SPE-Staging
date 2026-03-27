@@ -625,7 +625,7 @@ BRANCH_CHART_MAP = {
     # Chart 1
     "CS":   1, "LTCS": 1, "SS":   1, "DSS":  1, "SDSS": 1,
     # Chart 2
-    "CS_GALV": 2,
+    "CS GALV": 2, "CS_GALV": 2,
     # Chart 3
     "CuNi": 3,
     # Chart 4
