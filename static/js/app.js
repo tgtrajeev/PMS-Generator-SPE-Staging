@@ -657,7 +657,7 @@ const App = {
 
     // -- Load Pipe Sizes -----------------------------------------------
     async loadPipeSizes() {
-        const matType = this.data.msr.material_type || 'CS';
+        const matType = encodeURIComponent(this.data.msr.material_type || 'CS');
         const res = await fetch(`/api/pipe_sizes?material_type=${matType}`);
         this._availablePipeSizes = await res.json();
     },
@@ -676,12 +676,13 @@ const App = {
 
         const pressureClass = part1Info.pressure_psig;
         const matType = this.data.msr.material_type || 'CS';
+        const matTypeEnc = encodeURIComponent(matType);
 
         // Render Step 1 summary panel
         this._renderStep1Summary(pressureClass, matType);
 
         try {
-            const res = await fetch(`/api/pt_rating_table?pressure_class=${pressureClass}&material_type=${matType}`);
+            const res = await fetch(`/api/pt_rating_table?pressure_class=${pressureClass}&material_type=${matTypeEnc}`);
             const data = await res.json();
 
             // Store for later re-render
@@ -886,7 +887,7 @@ const App = {
 
         // Determine standard label
         const stdLabel = data.pressure_class <= 2500 ? 'ASME B16.5-2020' : 'API 6A';
-        const groupLabel = data.material_type === 'SS' ? 'Group 2.3 (A182 F316/F316L)' : 'Group 1.1 (A105/A216 WCB)';
+        const groupLabel = data.table_group || (data.material_type === 'SS' ? 'Group 2.3 (A182 F316/F316L)' : 'Group 1.1 (A105/A216 WCB)');
 
         // Build table rows — temperature as columns, pressure as rows
         let thCells = '';
