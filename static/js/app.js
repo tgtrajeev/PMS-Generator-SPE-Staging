@@ -1239,11 +1239,95 @@ const App = {
                 large_bore: await lbRes.json(),
             };
             this.renderFittings();
+            // Fetch and render the branch table for the selected material
+            this.fetchBranchTable();
         } catch (e) {
             console.error(e);
             this.showToast('Fittings assignment failed.', 'error');
         }
         this.hideLoading();
+    },
+
+    async fetchBranchTable() {
+        try {
+            const matType = this.data.msr.material_type || 'CS';
+            const res = await fetch('/api/branch_table', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ material_type: matType }),
+            });
+            const chart = await res.json();
+            if (chart.error) {
+                console.warn('Branch table:', chart.error);
+                return;
+            }
+            this.data.branch_chart = chart;
+            this.renderBranchTable(chart);
+        } catch (e) {
+            console.error('Branch table fetch failed:', e);
+        }
+    },
+
+    renderBranchTable(chart) {
+        const section = document.getElementById('branch-table-section');
+        if (!section) return;
+        section.style.display = 'block';
+
+        // Title
+        document.getElementById('branch-chart-title').textContent = chart.title + ' — Branch Table as per API RP 14E';
+
+        // Legend
+        const legendEl = document.getElementById('branch-legend');
+        const legendParts = Object.entries(chart.legend).map(([code, name]) => {
+            const colors = { W: '#2c3e50', T: '#1a6b3c', H: '#8b4513', S: '#6c3483', RT: '#d4a017', '-': '#999' };
+            const bg = { W: '#eaf2f8', T: '#e8f8f0', H: '#fdf2e9', S: '#f4ecf7', RT: '#fef9e7', '-': '#f0f0f0' };
+            return `<span style="display:inline-block;margin:2px 10px 2px 0;padding:3px 10px;border-radius:4px;background:${bg[code]||'#f0f0f0'};border:1px solid ${colors[code]||'#ccc'};font-weight:600;font-size:0.85em;">
+                <span style="color:${colors[code]||'#333'}">${code}</span> = ${name}</span>`;
+        });
+        legendEl.innerHTML = '<strong>Legend:</strong> ' + legendParts.join('');
+
+        // Matrix table
+        const branches = chart.branch_sizes;
+        let html = '<table class="result-table" style="font-size:0.82em;text-align:center;border-collapse:collapse;width:auto;">';
+
+        // Header row: Branch Pipe sizes
+        html += '<thead><tr><th style="background:#1a5276;color:#fff;padding:6px 8px;position:sticky;left:0;z-index:2;">Run \\ Branch</th>';
+        for (const b of branches) {
+            const lbl = b <= 1 ? '\u22641' : String(b);
+            html += `<th style="background:#1a5276;color:#fff;padding:6px 6px;min-width:36px;font-size:0.9em;">${lbl}</th>`;
+        }
+        html += '</tr></thead><tbody>';
+
+        // Data rows
+        const cellColors = { W: '#2c3e50', T: '#1a6b3c', H: '#8b4513', S: '#6c3483', RT: '#d4a017', '-': '#bbb' };
+        const cellBg =     { W: '#eaf2f8', T: '#e8f8f0', H: '#fdf2e9', S: '#f4ecf7', RT: '#fef9e7', '-': '#f9f9f9' };
+
+        for (const row of chart.rows) {
+            const runLabel = row.run_nps <= 1 ? '\u22641' : String(row.run_nps);
+            html += `<tr><td style="background:#f0f4f7;font-weight:700;padding:5px 8px;text-align:left;position:sticky;left:0;z-index:1;border-right:2px solid #1a5276;">${runLabel}</td>`;
+            for (let i = 0; i < branches.length; i++) {
+                const val = row.cells[i];
+                if (val && branches[i] <= row.run_nps) {
+                    const bg = cellBg[val] || '#fff';
+                    const fg = cellColors[val] || '#333';
+                    const isDiag = branches[i] === row.run_nps;
+                    const border = isDiag ? 'border:2px solid #1a5276;' : '';
+                    html += `<td style="background:${bg};color:${fg};font-weight:700;padding:4px 2px;${border}">${val}</td>`;
+                } else {
+                    html += '<td style="background:#f7f7f7;"></td>';
+                }
+            }
+            html += '</tr>';
+        }
+        html += '</tbody></table>';
+
+        // Labels
+        html += '<div style="display:flex;justify-content:space-between;margin-top:6px;font-size:0.8em;color:#666;">';
+        html += '<span>\u2191 <strong>RUN PIPE</strong></span>';
+        html += '<span><strong>BRANCH PIPE</strong> \u2192</span>';
+        html += '</div>';
+
+        document.getElementById('branch-table-container').innerHTML = html;
     },
 
     renderFittings() {
