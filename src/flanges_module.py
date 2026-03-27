@@ -9,8 +9,15 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from data.reference_data import (
     FLANGE_RATINGS_CS, FLANGE_RATINGS_SS,
+    FLANGE_RATINGS_CS_GALV_METRIC,
     FLANGE_MATERIALS, GASKET_MATERIALS, BOLTING_MATERIALS
 )
+
+# Build an imperial (psig / °F) version of CS GALV from the metric table
+_FLANGE_RATINGS_CS_GALV = {}
+for _tc, _classes in FLANGE_RATINGS_CS_GALV_METRIC.items():
+    _tf = round(_tc * 9 / 5 + 32)
+    _FLANGE_RATINGS_CS_GALV[_tf] = {cls: round(p / 0.0689476) for cls, p in _classes.items()}
 
 
 def select_flange_rating(design_pressure_psig, design_temp_f, material_type):
@@ -20,13 +27,16 @@ def select_flange_rating(design_pressure_psig, design_temp_f, material_type):
     Args:
         design_pressure_psig: Design pressure in psig
         design_temp_f: Design temperature in degF
-        material_type: CS, CS-LT, SS, or Alloy
+        material_type: CS, CS-LT, SS, Alloy, CS GALV, etc.
 
     Returns:
         Selected flange class (150, 300, 600, etc.)
     """
-    if material_type in ("SS",):
+    mt = (material_type or "CS").upper().strip()
+    if mt in ("SS", "SS316", "SS316L", "DSS", "SDSS"):
         ratings = FLANGE_RATINGS_SS
+    elif mt in ("CS GALV", "CS_GALV"):
+        ratings = _FLANGE_RATINGS_CS_GALV
     else:
         ratings = FLANGE_RATINGS_CS
 

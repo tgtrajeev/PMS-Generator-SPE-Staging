@@ -9,8 +9,19 @@ from data.reference_data import (
     ALLOWABLE_STRESS, PIPE_DIMENSIONS_B36_10, PIPE_DIMENSIONS_B36_19,
     TYPICAL_CA, FLANGE_RATINGS_CS, FLANGE_RATINGS_SS,
     FLANGE_RATINGS_CS_METRIC, FLANGE_RATINGS_SS_METRIC,
+    FLANGE_RATINGS_CS_GALV_METRIC,
     PRESSURE_RATING_CODES,
 )
+
+
+def _get_metric_ratings(material_type):
+    """Return the correct metric P-T rating table for a material type."""
+    mt = (material_type or "CS").upper().strip()
+    if mt in ("SS", "SS316", "SS316L", "DSS", "SDSS", "6MO TUBING", "SS316L/316 TUBING"):
+        return FLANGE_RATINGS_SS_METRIC, "Group 2.3 (A182 F316/F316L)"
+    if mt in ("CS GALV", "CS_GALV"):
+        return FLANGE_RATINGS_CS_GALV_METRIC, "Group 1.1 — CS GALV (de-rated)"
+    return FLANGE_RATINGS_CS_METRIC, "Group 1.1 (A105/A216 WCB)"
 
 router = APIRouter()
 
@@ -75,7 +86,7 @@ async def get_pt_rating_table(
     if pressure_class <= 2500:
         standard = "ASME B16.5-2020"
         # Use metric tables directly (proper °C / bar values)
-        metric_ratings = FLANGE_RATINGS_SS_METRIC if material_type in ("SS",) else FLANGE_RATINGS_CS_METRIC
+        metric_ratings, table_group = _get_metric_ratings(material_type)
         pt_pairs = []
         for temp_c in sorted(metric_ratings.keys()):
             class_pressures = metric_ratings[temp_c]
@@ -91,8 +102,10 @@ async def get_pt_rating_table(
                 })
     else:
         standard = "API 6A"
+        table_group = "API 6A"
         # API 6A classes use imperial tables — convert to metric
-        imperial_ratings = FLANGE_RATINGS_SS if material_type in ("SS",) else FLANGE_RATINGS_CS
+        mt = (material_type or "CS").upper().strip()
+        imperial_ratings = FLANGE_RATINGS_SS if mt in ("SS", "SS316", "SS316L", "DSS", "SDSS") else FLANGE_RATINGS_CS
         pt_pairs = []
         for temp_f in sorted(imperial_ratings.keys()):
             class_pressures = imperial_ratings[temp_f]
@@ -107,9 +120,11 @@ async def get_pt_rating_table(
                     "pressure_barg": pressure_barg,
                 })
 
+    table_label = table_group if pressure_class <= 2500 else "API 6A"
     return {
         "pressure_class": pressure_class,
         "material_type": material_type,
         "standard": standard,
+        "table_group": table_label,
         "pt_pairs": pt_pairs,
     }
