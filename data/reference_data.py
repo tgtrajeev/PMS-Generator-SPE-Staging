@@ -611,3 +611,179 @@ PMS_MATERIAL_TYPE_TO_GRADE = {
     "SS316L/316 Tubing":  {"grade": "A312 TP316", "base_type": "SS",    "spec": "ASTM A269", "smts": 75000, "smys": 30000, "display_name": "SS316L/316 Tubing",             "is_low_temp": True,  "is_nace": True},
     "6Mo Tubing":         {"grade": "A312 TP316", "base_type": "SS",    "spec": "ASTM B677", "smts": 80000, "smys": 35000, "display_name": "6Mo Tubing",                    "is_low_temp": True,  "is_nace": True},
 }
+
+
+# ============================================================
+# BRANCH CONNECTION TABLES — per API RP 14E / Company Standard
+# ============================================================
+# Each chart maps (run_nps, branch_nps) → connection type.
+# Encoded as T-cutoff: branch >= cutoff → Tee family, else → Olet family.
+# For charts with 3 zones, an additional "small_max" defines the small-branch zone.
+
+# Material → Chart mapping
+BRANCH_CHART_MAP = {
+    # Chart 1
+    "CS":   1, "LTCS": 1, "SS":   1, "DSS":  1, "SDSS": 1,
+    # Chart 2
+    "CS_GALV": 2,
+    # Chart 3
+    "CuNi": 3,
+    # Chart 4
+    "GRE":  4,
+}
+
+# ── Chart 1: CS, LTCS, SS, DSS, SDSS ──────────────────────
+# Legend: W = Weldolet, T = Tee
+_CHART1_RUN_SIZES    = [1, 1.5, 2, 3, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 30, 32]
+_CHART1_BRANCH_SIZES = [1, 1.5, 2, 3, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 30, 32]
+_CHART1_T_CUTOFF = {
+    1: 1, 1.5: 1, 2: 1.5, 3: 2, 4: 2, 6: 3, 8: 4, 10: 6, 12: 8,
+    14: 10, 16: 10, 18: 10, 20: 12, 22: 12, 24: 14, 30: 18, 32: 18,
+}
+
+def _chart1_lookup(run, branch):
+    if branch > run:
+        return None
+    cutoff = _CHART1_T_CUTOFF.get(run)
+    if cutoff is None:
+        return None
+    return "T" if branch >= cutoff else "W"
+
+# ── Chart 2: CS GALV ──────────────────────────────────────
+# Legend: H = Threadolet, W = Weldolet, T = Tee
+_CHART2_RUN_SIZES    = [1, 1.5, 2, 3, 4, 6, 8, 10, 12, 14, 16, 18, 20, 24]
+_CHART2_BRANCH_SIZES = [1, 1.5, 2, 3, 4, 6, 8, 10, 12, 14, 16, 18, 20, 24]
+_CHART2_T_CUTOFF = {
+    1: 1, 1.5: 1, 2: 1.5, 3: 3, 4: 3, 6: 3, 8: 4, 10: 6, 12: 6,
+    14: 8, 16: 8, 18: 10, 20: 10, 24: 12,
+}
+
+def _chart2_lookup(run, branch):
+    if branch > run:
+        return None
+    cutoff = _CHART2_T_CUTOFF.get(run)
+    if cutoff is None:
+        return None
+    if branch >= cutoff:
+        return "T"
+    if branch <= 2:
+        return "H"
+    return "W"
+
+# ── Chart 3: CuNi ─────────────────────────────────────────
+# Legend: S = Sockolet, W = Weldolet, T = Tee BW
+_CHART3_RUN_SIZES    = [1, 1.5, 2, 3, 4, 6, 8, 10, 12, 14, 16, 18, 20, 24, 28, 32, 36]
+_CHART3_BRANCH_SIZES = [1, 1.5, 2, 3, 4, 6, 8, 10, 12, 14, 16, 18, 20, 24, 28, 32, 36]
+_CHART3_T_CUTOFF = {
+    1: 1, 1.5: 1, 2: 1.5, 3: 2, 4: 2, 6: 3, 8: 4, 10: 6, 12: 6,
+    14: 8, 16: 8, 18: 10, 20: 10, 24: 12, 28: 12, 32: 16, 36: 16,
+}
+
+def _chart3_lookup(run, branch):
+    if branch > run:
+        return None
+    cutoff = _CHART3_T_CUTOFF.get(run)
+    if cutoff is None:
+        return None
+    if branch >= cutoff:
+        return "T"
+    if branch <= 1.5:
+        return "S"
+    return "W"
+
+# ── Chart 4: GRE ──────────────────────────────────────────
+# Legend: T = Equal Tee, RT = Reducing Tee, S = Reducing Saddle, - = N/A
+_CHART4_RUN_SIZES    = [0.75, 1, 1.5, 2, 3, 4, 6, 8, 10, 12, 14, 16, 18, 20, 24]
+_CHART4_BRANCH_SIZES = [1, 1.5, 2, 3, 4, 6, 8, 10, 12, 14, 16, 18, 20, 24]
+
+def _chart4_lookup(run, branch):
+    if branch > run:
+        return None
+    if run < 1:
+        return "-"
+    if branch == run:
+        return "T"
+    if branch <= 1:
+        return "-"
+    if run >= 6 and branch <= 2:
+        return "S"
+    return "RT"
+
+
+# ── Unified Branch Chart API ──────────────────────────────
+BRANCH_CHARTS = {
+    1: {
+        "chart_id": 1,
+        "title": "Chart 1 (CS, LTCS, SS, DSS, SDSS)",
+        "materials": ["CS", "LTCS", "SS", "DSS", "SDSS"],
+        "legend": {"W": "Weldolet", "T": "Tee"},
+        "run_sizes": _CHART1_RUN_SIZES,
+        "branch_sizes": _CHART1_BRANCH_SIZES,
+        "lookup": _chart1_lookup,
+    },
+    2: {
+        "chart_id": 2,
+        "title": "Chart 2 (CS GALV)",
+        "materials": ["CS_GALV"],
+        "legend": {"H": "Threadolet", "W": "Weldolet", "T": "Tee"},
+        "run_sizes": _CHART2_RUN_SIZES,
+        "branch_sizes": _CHART2_BRANCH_SIZES,
+        "lookup": _chart2_lookup,
+    },
+    3: {
+        "chart_id": 3,
+        "title": "Chart 3 (CuNi)",
+        "materials": ["CuNi"],
+        "legend": {"S": "Sockolet", "W": "Weldolet", "T": "Tee BW"},
+        "run_sizes": _CHART3_RUN_SIZES,
+        "branch_sizes": _CHART3_BRANCH_SIZES,
+        "lookup": _chart3_lookup,
+    },
+    4: {
+        "chart_id": 4,
+        "title": "Chart 4 (GRE)",
+        "materials": ["GRE"],
+        "legend": {"T": "Equal Tee", "RT": "Reducing Tee", "S": "Reducing Saddle", "-": "N/A"},
+        "run_sizes": _CHART4_RUN_SIZES,
+        "branch_sizes": _CHART4_BRANCH_SIZES,
+        "lookup": _chart4_lookup,
+    },
+}
+
+
+def get_branch_chart(material_type):
+    """Return the applicable branch chart number for a material type."""
+    return BRANCH_CHART_MAP.get(material_type, 1)  # default Chart 1
+
+
+def branch_lookup(material_type, run_nps, branch_nps):
+    """Look up the branch connection type for given material, run and branch NPS."""
+    chart_num = get_branch_chart(material_type)
+    chart = BRANCH_CHARTS.get(chart_num)
+    if not chart:
+        return None
+    return chart["lookup"](run_nps, branch_nps)
+
+
+def get_branch_table_matrix(chart_num):
+    """Generate the full branch table matrix for display."""
+    chart = BRANCH_CHARTS.get(chart_num)
+    if not chart:
+        return None
+    run_sizes = chart["run_sizes"]
+    branch_sizes = chart["branch_sizes"]
+    lookup = chart["lookup"]
+    matrix = []
+    for run in run_sizes:
+        row = {"run_nps": run, "cells": []}
+        for branch in branch_sizes:
+            val = lookup(run, branch)
+            row["cells"].append(val if val else "")
+        matrix.append(row)
+    return {
+        "chart_id": chart["chart_id"],
+        "title": chart["title"],
+        "legend": chart["legend"],
+        "branch_sizes": branch_sizes,
+        "rows": matrix,
+    }

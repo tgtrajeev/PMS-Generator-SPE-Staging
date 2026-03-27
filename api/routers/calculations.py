@@ -18,6 +18,8 @@ from data.reference_data import (
     PRESSURE_RATING_CODES, PMS_MATERIAL_CODES,
     PMS_TUBING_CODES, PMS_PART3_TUBING, PMS_PART3_NON_TUBING,
     PMS_MATERIAL_TYPE_TO_GRADE, JOINT_EFFICIENCY, ALLOWABLE_STRESS,
+    BRANCH_CHARTS, BRANCH_CHART_MAP, get_branch_chart,
+    get_branch_table_matrix, branch_lookup,
 )
 from src.pms_code_module import (
     auto_suggest_part1, auto_suggest_part2, auto_suggest_part3,
@@ -655,4 +657,44 @@ async def validate_pms_code_endpoint(req: PMSCodeValidateRequest):
         "validation": validation,
         "code": code_result,
         "suggestions": suggestions,
+    }
+
+
+# ============================================================
+# BRANCH TABLE ENDPOINT — API RP 14E
+# ============================================================
+
+class BranchTableRequest(BaseModel):
+    material_type: str = "CS"
+
+class BranchLookupRequest(BaseModel):
+    material_type: str = "CS"
+    run_nps: float
+    branch_nps: float
+
+
+@router.post("/branch_table")
+async def get_branch_table(req: BranchTableRequest):
+    """Return the full branch connection table matrix for a material type."""
+    chart_num = get_branch_chart(req.material_type)
+    matrix = get_branch_table_matrix(chart_num)
+    if not matrix:
+        return {"error": f"No branch chart for material {req.material_type}"}
+    return matrix
+
+
+@router.post("/branch_lookup")
+async def branch_lookup_endpoint(req: BranchLookupRequest):
+    """Look up a single branch connection type."""
+    conn_type = branch_lookup(req.material_type, req.run_nps, req.branch_nps)
+    chart_num = get_branch_chart(req.material_type)
+    chart = BRANCH_CHARTS.get(chart_num, {})
+    legend = chart.get("legend", {})
+    full_name = legend.get(conn_type, conn_type) if conn_type else "N/A"
+    return {
+        "chart_id": chart_num,
+        "run_nps": req.run_nps,
+        "branch_nps": req.branch_nps,
+        "connection_type": conn_type or "-",
+        "connection_name": full_name,
     }
