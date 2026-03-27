@@ -622,14 +622,17 @@ PMS_MATERIAL_TYPE_TO_GRADE = {
 
 # Material → Chart mapping
 BRANCH_CHART_MAP = {
-    # Chart 1
-    "CS":   1, "LTCS": 1, "SS":   1, "DSS":  1, "SDSS": 1,
-    # Chart 2
+    # Chart 1 — CS, LTCS, SS, DSS, SDSS and variants
+    "CS": 1, "LTCS": 1, "CS IC": 1,
+    "SS": 1, "SS316": 1, "SS316L": 1, "SS316L/316 Tubing": 1, "6Mo Tubing": 1,
+    "DSS": 1, "SDSS": 1,
+    "Cu": 1,
+    # Chart 2 — CS GALV
     "CS GALV": 2, "CS_GALV": 2,
-    # Chart 3
+    # Chart 3 — CuNi
     "CuNi": 3,
-    # Chart 4
-    "GRE":  4,
+    # Chart 4 — GRE / Non-Metallic
+    "GRE": 4, "GRV": 4, "CPVC": 4,
 }
 
 # ── Chart 1: CS, LTCS, SS, DSS, SDSS ──────────────────────
