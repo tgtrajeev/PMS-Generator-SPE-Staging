@@ -174,15 +174,16 @@ FLANGE_RATINGS_CS_METRIC = {
 }
 
 FLANGE_RATINGS_CS_GALV_METRIC = {
-    # CS GALV (Galvanised Carbon Steel) — ASME B16.5-2020 Group 1.1
-    # De-rated for galvanized service; max operating temp limited to 200°C
-    # Zinc coating degrades above ~200°C, lower pressure ratings apply
+    # CS GALV (Galvanised Carbon Steel) — ASME B16.5-2020 Group 2.1
+    # De-rated for galvanized service; zinc coating degrades above ~200°C
     -29: {150: 15.9, 300: 41.4, 400: 55.2, 600: 82.7, 900: 124.1, 1500: 206.8, 2500: 344.8},
      38: {150: 15.9, 300: 41.4, 400: 55.2, 600: 82.7, 900: 124.1, 1500: 206.8, 2500: 344.8},
      50: {150: 15.3, 300: 40.0, 400: 53.4, 600: 80.0, 900: 120.0, 1500: 200.0, 2500: 333.4},
     100: {150: 13.3, 300: 35.2, 400: 46.9, 600: 70.3, 900: 105.5, 1500: 175.8, 2500: 293.1},
     150: {150: 12.0, 300: 33.1, 400: 44.1, 600: 66.2, 900: 99.3,  1500: 165.5, 2500: 275.8},
     200: {150: 10.5, 300: 30.0, 400: 40.0, 600: 60.0, 900: 90.0,  1500: 150.0, 2500: 250.0},
+    250: {150:  9.2, 300: 26.2, 400: 34.8, 600: 52.4, 900: 78.6,  1500: 131.0, 2500: 218.6},
+    300: {150:  7.9, 300: 22.1, 400: 29.3, 600: 44.1, 900: 66.2,  1500: 110.3, 2500: 183.4},
 }
 
 FLANGE_RATINGS_SS_METRIC = {
