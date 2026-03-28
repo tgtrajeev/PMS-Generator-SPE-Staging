@@ -28,9 +28,11 @@ LOGO_URL = "https://www.shapoorjipallonjienergy.com/img/logo.png"
 from data.reference_data import (
     FLANGE_RATINGS_CS, FLANGE_RATINGS_SS,
     FLANGE_RATINGS_CS_METRIC, FLANGE_RATINGS_SS_METRIC,
+    FLANGE_RATINGS_CS_GALV_METRIC,
     PIPE_DIMENSIONS_B36_10, PIPE_DIMENSIONS_B36_19,
     STANDARD_OD_MM, VALVE_MATERIALS, VALVE_END_CONNECTIONS,
     VDS_VALVE_TYPE_CODES, VDS_DESIGN_CODES,
+    get_branch_chart, BRANCH_CHARTS,
 )
 from src.valve_module import generate_vds_code
 
@@ -148,10 +150,16 @@ NUT_MATERIAL = {
 
 # Material display name
 MATERIAL_DISPLAY = {
-    "CS":     "Carbon Steel",
-    "CS-LT":  "LTCS",
-    "SS":     "Stainless Steel",
-    "Alloy":  "Alloy Steel",
+    "CS":       "Carbon Steel",
+    "CS-LT":    "LTCS",
+    "CS GALV":  "CS Galvanised",
+    "CS_GALV":  "CS Galvanised",
+    "SS":       "Stainless Steel",
+    "DSS":      "Duplex Stainless Steel",
+    "SDSS":     "Super Duplex Stainless Steel",
+    "CuNi":     "90/10 Copper Nickel",
+    "GRE":      "Glass Reinforced Epoxy",
+    "Alloy":    "Alloy Steel",
 }
 
 # Design code string by NACE flag
@@ -320,13 +328,16 @@ def generate_pms_excel(pms_data, output_dir):
 
     spec_code = str(sc.get("spec_code", "") or "")
     pms_code  = str(sc.get("pms_code", spec_code) or spec_code)
+    # pms_material_type = original user selection (e.g. "CS GALV", "CuNi", "GRE")
+    # material_type     = base type for pipe dimension tables (e.g. "CS", "SS")
+    pms_material_type = str(msr.get("pms_material_type", "") or msr.get("material_type", "CS") or "CS")
     material_type = str(msr.get("material_type", "CS") or "CS")
     # Coerce to plain bool — JSON may deliver {} / null / 0 / "true" from some clients
     is_nace    = bool(sc.get("is_nace", False)) or "N" in (str(sc.get("part3_code", "") or ""))
     is_low_temp = bool(sc.get("is_low_temp", False)) or "L" in (str(sc.get("part3_code", "") or ""))
 
     # Determine effective material type for lookups
-    eff_mat = str(material_type)
+    eff_mat = str(pms_material_type)
     if material_type == "CS" and is_low_temp:
         eff_mat = "CS-LT"
 
@@ -442,9 +453,12 @@ def generate_pms_excel(pms_data, output_dir):
     mw(5, 6, 8, "Service:", bold=True, left=True)
     mw(5, 9, LAST_COL, line.get("fluid", msr.get("fluid_service", "General Service")))
 
-    # Row 6: Branch Chart
+    # Row 6: Branch Chart — select based on pms_material_type
+    branch_chart_num = get_branch_chart(pms_material_type)
+    branch_chart_info = BRANCH_CHARTS.get(branch_chart_num, {})
+    branch_chart_title = branch_chart_info.get("title", f"Chart {branch_chart_num}")
     mw(6, 6, 8, "Branch Chart: ", bold=True, left=True)
-    mw(6, 9, LAST_COL, "Ref. APPENDIX-1, Chart 1")
+    mw(6, 9, LAST_COL, f"Ref. APPENDIX-1, {branch_chart_title}")
 
     # ══════════════════════════════════════════════════════════════
     # PRESSURE-TEMPERATURE RATING (Rows 7-9)
@@ -454,7 +468,7 @@ def generate_pms_excel(pms_data, output_dir):
     for c in range(2, LAST_COL + 1):
         ws.cell(row=7, column=c).fill = fill_section
 
-    pt_pairs = get_pt_rating_pairs(material_type, piping_class)
+    pt_pairs = get_pt_rating_pairs(pms_material_type, piping_class)
 
     # Determine minimum design temperature for material
     # LTCS (A333 Gr.6): -45°C, CS (A106 Gr.B): -29°C, SS: -196°C
