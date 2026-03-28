@@ -895,14 +895,36 @@ const App = {
         else if (mt.includes('GALV')) defaultGroup = 'Group 2.1 (A105 Galvanized, max 200\u00B0C)';
         const groupLabel = data.table_group || defaultGroup;
 
-        // Build table rows — temperature as columns, pressure as rows
+        // Build table rows — merge consecutive temp columns with identical pressure
+        const merged = [];
+        for (const pt of data.pt_pairs) {
+            const last = merged.length > 0 ? merged[merged.length - 1] : null;
+            if (last && last.pressure_barg === pt.pressure_barg) {
+                // Same pressure — extend range
+                last.temp_end = pt.temp_c;
+            } else {
+                merged.push({
+                    temp_start: pt.temp_c,
+                    temp_end: pt.temp_c,
+                    pressure_barg: pt.pressure_barg,
+                    pressure_psig: pt.pressure_psig,
+                    temp_c: pt.temp_c,
+                });
+            }
+        }
+
         let thCells = '';
         let tdBarg = '';
-        for (const pt of data.pt_pairs) {
-            const isDesignPoint = maxPAtDesignT && pt.temp_c === maxPAtDesignT.temp_c;
+        for (const m of merged) {
+            const tempLabel = m.temp_start === m.temp_end
+                ? `${m.temp_start}`
+                : `${m.temp_start} to ${m.temp_end}`;
+            // Highlight if design temp falls in this merged range
+            const isDesignPoint = maxPAtDesignT &&
+                maxPAtDesignT.temp_c >= m.temp_start && maxPAtDesignT.temp_c <= m.temp_end;
             const highlight = isDesignPoint ? ' style="background:#fff3cd;font-weight:bold"' : '';
-            thCells += `<th${highlight}>${pt.temp_c}</th>`;
-            tdBarg += `<td${highlight}>${pt.pressure_barg}</td>`;
+            thCells += `<th${highlight}>${tempLabel}</th>`;
+            tdBarg += `<td${highlight}>${m.pressure_barg}</td>`;
         }
 
         const statusClass = isAdequate ? 'pass' : 'fail';
