@@ -20,6 +20,10 @@ class FittingsRequest(BaseModel):
     pipe_size: str = "6"
     schedule: str = "40"
     material_type: str = "CS"
+    pms_material_type: str = ""
+    service: str = ""
+    is_nace: bool = False
+    is_low_temp: bool = False
 
 
 class FlangesRequest(BaseModel):
@@ -46,6 +50,10 @@ async def api_assign_fittings(req: FittingsRequest):
             pipe_size_nps=req.pipe_size,
             schedule=req.schedule,
             material_type=req.material_type,
+            pms_material_type=req.pms_material_type or req.material_type,
+            service=req.service,
+            is_nace=req.is_nace,
+            is_low_temp=req.is_low_temp,
         )
     return result
 
