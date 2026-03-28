@@ -1382,9 +1382,6 @@ const App = {
                     <td>${d?.schedule || d?.standard || ''}</td>
                     <td>${d?.standard || 'ASTM'}</td>
                 </tr>`).join('');
-            const branch = f.branch_connections || {};
-            const branchRows = Object.entries(branch).map(([k, v]) =>
-                `<tr><td>${k.replace(/_/g, ' ')}</td><td colspan="3">${v}</td></tr>`).join('');
             return `
                 <h4 style="margin:18px 0 8px;color:#1a5276;border-bottom:2px solid #1a5276;padding-bottom:4px">
                     ${label} <small style="color:#666;font-weight:normal">(NPS ${npsRange})</small>
@@ -1396,11 +1393,6 @@ const App = {
                 <table class="result-table">
                     <thead><tr><th>Component</th><th>Material</th><th>Schedule/Class</th><th>Standard</th></tr></thead>
                     <tbody>${rows}</tbody>
-                </table>
-                <h5 style="margin:12px 0 4px;color:#555">Branch Connection Guide</h5>
-                <table class="result-table">
-                    <thead><tr><th>Size Difference</th><th colspan="3">Connection Type</th></tr></thead>
-                    <tbody>${branchRows}</tbody>
                 </table>`;
         };
 
