@@ -675,7 +675,9 @@ const App = {
         }
 
         const pressureClass = part1Info.pressure_psig;
-        const matType = this.data.msr.material_type || 'CS';
+        // Use pms_material_type (original selection, e.g. "CS GALV") for P-T lookup,
+        // NOT material_type which is the base type (e.g. "CS")
+        const matType = this.data.msr.pms_material_type || this.data.msr.material_type || 'CS';
         const matTypeEnc = encodeURIComponent(matType);
 
         // Render Step 1 summary panel
@@ -887,7 +889,11 @@ const App = {
 
         // Determine standard label
         const stdLabel = data.pressure_class <= 2500 ? 'ASME B16.5-2020' : 'API 6A';
-        const groupLabel = data.table_group || (data.material_type === 'SS' ? 'Group 2.3 (A182 F316/F316L)' : 'Group 1.1 (A105/A216 WCB)');
+        const mt = (data.material_type || '').toUpperCase().replace(/\s+/g, '_');
+        let defaultGroup = 'Group 1.1 (A105/A216 WCB)';
+        if (mt === 'SS' || mt.includes('316') || mt.includes('304')) defaultGroup = 'Group 2.3 (A182 F316/F316L)';
+        else if (mt.includes('GALV')) defaultGroup = 'Group 2.1 (A105 Galvanized, max 200\u00B0C)';
+        const groupLabel = data.table_group || defaultGroup;
 
         // Build table rows — temperature as columns, pressure as rows
         let thCells = '';

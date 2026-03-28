@@ -170,9 +170,17 @@ GASKET_DESC = {
 def get_pt_rating_pairs(material_type, flange_class):
     """Extract P-T rating pairs in metric: (temp_c, pressure_bar).
     Uses ASME B16.5-2020 METRIC tables directly (°C and bar).
+    Routes CS GALV to the de-rated Group 2.1 table.
     """
-    # Use metric tables (exact values from ASME B16.5 metric edition)
-    metric_table = FLANGE_RATINGS_SS_METRIC if material_type == "SS" else FLANGE_RATINGS_CS_METRIC
+    # Select the correct metric table based on material type
+    mt = str(material_type or "CS").upper().replace(" ", "_")
+    if mt == "SS" or "316" in mt or "304" in mt:
+        metric_table = FLANGE_RATINGS_SS_METRIC
+    elif mt in ("CS_GALV", "CSGALV", "CS-GALV"):
+        metric_table = FLANGE_RATINGS_CS_GALV_METRIC
+    else:
+        metric_table = FLANGE_RATINGS_CS_METRIC
+
     flange_class_int = int(flange_class) if flange_class else 150
 
     pairs = []
@@ -183,7 +191,7 @@ def get_pt_rating_pairs(material_type, flange_class):
 
     # Fallback to imperial table with conversion if metric not available
     if not pairs:
-        ratings = FLANGE_RATINGS_SS if material_type == "SS" else FLANGE_RATINGS_CS
+        ratings = FLANGE_RATINGS_SS if "SS" in mt else FLANGE_RATINGS_CS
         for temp_f in sorted(ratings.keys()):
             if flange_class_int in ratings[temp_f]:
                 temp_c = round((temp_f - 32) * 5 / 9)

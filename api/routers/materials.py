@@ -19,8 +19,8 @@ def _get_metric_ratings(material_type):
     mt = (material_type or "CS").upper().strip()
     if mt in ("SS", "SS316", "SS316L", "DSS", "SDSS", "6MO TUBING", "SS316L/316 TUBING"):
         return FLANGE_RATINGS_SS_METRIC, "Group 2.3 (A182 F316/F316L)"
-    if mt in ("CS GALV", "CS_GALV"):
-        return FLANGE_RATINGS_CS_GALV_METRIC, "Group 1.1 — CS GALV (de-rated)"
+    if "GALV" in mt:
+        return FLANGE_RATINGS_CS_GALV_METRIC, "Group 2.1 (A105 Galvanized, max 200\u00b0C)"
     return FLANGE_RATINGS_CS_METRIC, "Group 1.1 (A105/A216 WCB)"
 
 router = APIRouter()
