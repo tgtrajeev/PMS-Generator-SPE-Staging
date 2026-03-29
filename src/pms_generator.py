@@ -31,15 +31,17 @@ from data.reference_data import (
     FLANGE_RATINGS_CS_GALV_METRIC,
     PIPE_DIMENSIONS_B36_10, PIPE_DIMENSIONS_B36_19,
     STANDARD_OD_MM, VALVE_MATERIALS, VALVE_END_CONNECTIONS,
-    VDS_VALVE_TYPE_CODES, VDS_DESIGN_CODES,
+    VDS_VALVE_TYPE_CODES, VDS_DESIGN_CODES, VDS_END_CONN_CODES,
+    VDS_SEAT_SELECTION, VALVE_SIZE_APPLICABILITY,
     get_branch_chart, BRANCH_CHARTS,
 )
-from src.valve_module import generate_vds_code
+from src.valve_module import generate_vds_code, recommend_vds_for_class
 
-# 20 NPS sizes matching reference template (cols B-U)
+# 22 NPS sizes matching reference template (cols B-W)
 STANDARD_NPS_SIZES = [
     "0.5", "0.75", "1", "1.5", "2", "3", "4", "6", "8", "10",
-    "12", "14", "16", "18", "20", "22", "24", "26", "28", "30"
+    "12", "14", "16", "18", "20", "22", "24", "26", "28", "30",
+    "32", "36",
 ]
 
 # ── Pipe Type Selection (per ASME B31.3 & PMS practice) ──────────
@@ -48,7 +50,7 @@ STANDARD_NPS_SIZES = [
 #   NPS ≥ 18"  → "LSAW" (default), upgrade to "LSAW, 100% RT" for:
 #                 - NACE / sour / critical service
 #                 - Hydrocarbon / Gas / Hazardous service
-SEAMLESS_SPLIT_NPS = 18  # NPS at which welded pipe starts
+SEAMLESS_SPLIT_NPS = 20  # NPS at which welded pipe starts (Seamless ≤ 18", LSAW ≥ 20")
 
 _HC_KEYWORDS = ["hydrocarbon", "hc ", "gas", "hazardous", "flammable",
                 "fuel", "diesel", "crude", "naphtha", "lpg", "lng"]
@@ -85,42 +87,52 @@ def determine_pipe_type(nps_str, service="", is_nace=False, is_critical=False):
 
 # Pipe MOC (seamless) by material type
 PIPE_MOC_SEAMLESS = {
-    "CS":     "ASTM A 106 Gr. B",
-    "CS-LT":  "ASTM A 333 Gr.6",
-    "SS":     "ASTM A 312 TP316",
-    "Alloy":  "ASTM A 335 P11",
+    "CS":       "ASTM A 106 Gr. B",
+    "CS GALV":  "ASTM A 106 Gr. B",
+    "CS_GALV":  "ASTM A 106 Gr. B",
+    "CS-LT":    "ASTM A 333 Gr.6",
+    "SS":       "ASTM A 312 TP316",
+    "Alloy":    "ASTM A 335 P11",
 }
 
-# Pipe MOC (welded / EFW) by material type
+# Pipe MOC (welded / LSAW) by material type
 PIPE_MOC_WELDED = {
-    "CS":     "ASTM A 672 Gr. B60 Class 12",
-    "CS-LT":  "ASTM A 671 - CC60 Class 22",
-    "SS":     "ASTM A 358 TP316 Class 1",
-    "Alloy":  "ASTM A 691 1-1/4 Cr",
+    "CS":       "API 5L Gr. B",
+    "CS GALV":  "API 5L Gr. B",
+    "CS_GALV":  "API 5L Gr. B",
+    "CS-LT":    "ASTM A 671 - CC60 Class 22",
+    "SS":       "ASTM A 358 TP316 Class 1",
+    "Alloy":    "ASTM A 691 1-1/4 Cr",
 }
 
 # Fitting MOC by material type
 FITTING_MOC = {
-    "CS":     "ASTM A 234 Gr. WPB",
-    "CS-LT":  "ASTM A 420 Gr. WPL6",
-    "SS":     "ASTM A 403 Gr. WP316",
-    "Alloy":  "ASTM A 234 WP11",
+    "CS":       "ASTM A 234 Gr. WPB",
+    "CS GALV":  "ASTM A 234 Gr. WPB, Seamless Galvanized",
+    "CS_GALV":  "ASTM A 234 Gr. WPB, Seamless Galvanized",
+    "CS-LT":    "ASTM A 420 Gr. WPL6",
+    "SS":       "ASTM A 403 Gr. WP316",
+    "Alloy":    "ASTM A 234 WP11",
 }
 
 # Flange / Spectacle MOC by material type
 FLANGE_MOC = {
-    "CS":     "ASTM A 105",
-    "CS-LT":  "ASTM A 350 Gr. LF2",
-    "SS":     "ASTM A 182 F316/F316L",
-    "Alloy":  "ASTM A 182 F11",
+    "CS":       "ASTM A 105",
+    "CS GALV":  "ASTM A 105N Galvanized",
+    "CS_GALV":  "ASTM A 105N Galvanized",
+    "CS-LT":    "ASTM A 350 Gr. LF2",
+    "SS":       "ASTM A 182 F316/F316L",
+    "Alloy":    "ASTM A 182 F11",
 }
 
-# Weldolet MOC by material type
+# Weldolet / Olet MOC by material type
 WELDOLET_MOC = {
-    "CS":     "MSS SP 97, ASTM A 105",
-    "CS-LT":  "MSS SP 97, ASTM A 350 Gr. LF2",
-    "SS":     "MSS SP 97, ASTM A 182 F316",
-    "Alloy":  "MSS SP 97, ASTM A 182 F11",
+    "CS":       "MSS SP 97, ASTM A 105",
+    "CS GALV":  "MSS SP 97, ASTM A 105N, Galvanized",
+    "CS_GALV":  "MSS SP 97, ASTM A 105N, Galvanized",
+    "CS-LT":    "MSS SP 97, ASTM A 350 Gr. LF2",
+    "SS":       "MSS SP 97, ASTM A 182 F316",
+    "Alloy":    "MSS SP 97, ASTM A 182 F11",
 }
 
 # Bolting by NACE flag
@@ -273,14 +285,14 @@ def generate_pms_excel(pms_data, output_dir):
     fill_section = PatternFill("solid", fgColor="D9E1F2")  # Light blue section headers
     fill_input = PatternFill("solid", fgColor="FFF2CC")    # Yellow for user inputs
 
-    LAST_COL = 21  # Column U (20 NPS sizes + 1 label col)
-    INSTR_COL = 23  # Column W (reference notes)
-    SOURCE_COL = 24  # Column X (source labels)
+    LAST_COL = 23  # Column W (22 NPS sizes + 1 label col: A=label, B-W=sizes)
+    INSTR_COL = 25  # Column Y (reference notes)
+    SOURCE_COL = 26  # Column Z (source labels)
 
     for col_idx in range(1, LAST_COL + 1):
         ws.column_dimensions[get_column_letter(col_idx)].width = 13.0
-    ws.column_dimensions['W'].width = 40.0
-    ws.column_dimensions['X'].width = 18.0
+    ws.column_dimensions[get_column_letter(INSTR_COL)].width = 40.0
+    ws.column_dimensions[get_column_letter(SOURCE_COL)].width = 18.0
 
     def wc(row, col, value, bold=False, left=False):
         c = ws.cell(row=row, column=col, value=value)
@@ -592,170 +604,323 @@ def generate_pms_excel(pms_data, output_dir):
     mw(18, 2, LAST_COL, "BE")
 
     # ══════════════════════════════════════════════════════════════
-    # FITTINGS DATA (Rows 19-27)
+    # FITTINGS DATA (Rows 19-30)
     # ══════════════════════════════════════════════════════════════
-    mw(19, 1, LAST_COL, "Fittings Data", bold=True)
-    ws.cell(row=19, column=1).fill = fill_section
-    for c in range(2, LAST_COL + 1):
-        ws.cell(row=19, column=c).fill = fill_section
+    is_galv = pms_material_type.upper().replace(" ", "_") in ("CS_GALV", "CS_GALVANIZED")
+    galv_suffix = ", Galvanized" if is_galv else ""
 
-    # Row 20: TYPE (Fittings — Seamless vs Welded matching pipe type)
-    wc(20, 1, "TYPE")
-    i = 0
-    while i < len(pipe_sizes):
-        is_seamless = pipe_sizes[i]["pipe_type"] == "Seamless"
-        fit_type = "Butt Weld (SCH to match pipe), Seamless" if is_seamless else "Butt Weld (SCH to match pipe), Welded"
-        j = i
-        while j < len(pipe_sizes) and (pipe_sizes[j]["pipe_type"] == "Seamless") == is_seamless:
-            j += 1
-        mw(20, SC + i, SC + j - 1, fit_type)
-        i = j
+    # Forged material (small bore) / BW material (large bore)
+    _forged_base = {
+        "CS": "ASTM A105", "CS-LT": "ASTM A 350 Gr. LF2",
+        "SS": "ASTM A 182 F316", "Alloy": "ASTM A 182 F11",
+    }
+    _bw_base = {
+        "CS": "ASTM A 234 Gr. WPB", "CS-LT": "ASTM A 420 Gr. WPL6",
+        "SS": "ASTM A 403 WP316", "Alloy": "ASTM A 234 WP11",
+    }
+    _olet_base = {
+        "CS": "ASTM A 105", "CS-LT": "ASTM A 350 Gr. LF2",
+        "SS": "ASTM A 182 F316", "Alloy": "ASTM A 182 F11",
+    }
+    base_mt = material_type if material_type in _forged_base else "CS"
+    forged_mat = _forged_base[base_mt]
+    bw_mat_fit = _bw_base[base_mt]
+    olet_base_mat = _olet_base[base_mt]
 
-    # Row 21: MOC
-    fit_moc = FITTING_MOC.get(eff_mat, "N/A")
-    wc(21, 1, "MOC")
-    mw(21, 2, LAST_COL, fit_moc)
+    # CS GALV uses Normalized forged material
+    if is_galv and forged_mat == "ASTM A105":
+        forged_mat = "ASTM A 105N"
+    if is_galv and olet_base_mat == "ASTM A 105":
+        olet_base_mat = "ASTM A 105N"
 
-    # Rows 22-26: Standards
-    for label, row in [("Elbow", 22), ("Tee", 23), ("Red.", 24), ("Cap", 25)]:
-        wc(row, 1, label)
-        mw(row, 2, LAST_COL, "ASME B 16.9")
+    # Small bore boundary: NPS ≤ 1.5" = first 4 sizes (0.5, 0.75, 1, 1.5)
+    SB_COUNT = 4  # indices 0-3
+    sb_end_col = SC + SB_COUNT - 1   # last col of small bore (NPS 1.5")
+    lb_start_col = SC + SB_COUNT     # first col of large bore (NPS 2")
 
-    wc(26, 1, "Plug")
-    # Plug (hex head) is applicable for small bore only: NPS ½" – 1½" (cols SC to SC+3)
-    sb_end_col = SC + 3  # NPS 1.5" is the 4th size (index 3)
-    mw(26, SC, sb_end_col, "Hex Head Plug, ASME B 16.11")
-    mw(26, sb_end_col + 1, LAST_COL, "-")
+    def _section_header(row, title):
+        mw(row, 1, LAST_COL, title, bold=True)
+        ws.cell(row=row, column=1).fill = fill_section
+        for c in range(2, LAST_COL + 1):
+            ws.cell(row=row, column=c).fill = fill_section
 
-    # Row 27: Weldolet
-    wc(27, 1, "Weldolet")
-    mw(27, 2, LAST_COL, WELDOLET_MOC.get(eff_mat, f"MSS SP 97, {fit_moc}"))
+    _section_header(19, "Fittings Data")
+
+    # Determine fittings template:
+    # - CS GALV → Template B: SW small bore + BW large bore (utility)
+    # - All others → Template A: All BW (process)
+    use_sw_small_bore = is_galv  # Only CS GALV uses socket weld / screwed for small bore
+
+    if use_sw_small_bore:
+        # ── Template B: CS GALV (SW small bore + BW large bore) ──────
+
+        # Row 20: TYPE
+        wc(20, 1, "TYPE")
+        if is_galv:
+            sb_type = "Screwed (SCRD), #3000"
+        else:
+            sb_type = "Socket Weld (SW), #3000"
+        mw(20, SC, sb_end_col, sb_type)
+        mw(20, lb_start_col, LAST_COL, "Butt Weld (SCH to match pipe), Seamless")
+
+        # Row 21: MOC
+        wc(21, 1, "MOC")
+        sb_moc = forged_mat + galv_suffix
+        lb_moc = bw_mat_fit + ", Seamless" + galv_suffix
+        mw(21, SC, sb_end_col, sb_moc)
+        mw(21, lb_start_col, LAST_COL, lb_moc)
+
+        # Rows 22-25: Elbow, Tee, Red., Cap — B16.11 (small) / B16.9 (large)
+        for label, row in [("Elbow", 22), ("Tee", 23), ("Red.", 24), ("Cap", 25)]:
+            wc(row, 1, label)
+            mw(row, SC, sb_end_col, "ASME B 16.11")
+            mw(row, lb_start_col, LAST_COL, "ASME B 16.9")
+
+        # Row 26: Coupl (small bore only)
+        wc(26, 1, "Coupl")
+        mw(26, SC, sb_end_col, "ASME B 16.11")
+        mw(26, lb_start_col, LAST_COL, "")
+
+        # Row 27: Hex Hd.Plug (small bore only)
+        wc(27, 1, "Hex Hd.Plug")
+        mw(27, SC, sb_end_col, "Hex Head Plug, ASME B 16.11")
+        mw(27, lb_start_col, LAST_COL, "")
+
+        # Row 28: Union
+        wc(28, 1, "Union")
+        mw(28, SC, sb_end_col, "ASME B 16.11")
+        mw(28, lb_start_col, LAST_COL, "BS 3799")
+
+        # Row 29: Olet (MSS SP 97)
+        wc(29, 1, "Olet")
+        mw(29, SC, sb_end_col, "MSS SP 97")
+        olet_desc_lb = f"MSS SP 97, {olet_base_mat}{galv_suffix}"
+        mw(29, lb_start_col, LAST_COL, olet_desc_lb)
+
+        # Row 30: Swage (MSS SP 95)
+        wc(30, 1, "Swage")
+        swage_desc = f"MSS SP 95, MOC Same as pipe{galv_suffix}"
+        mw(30, 2, LAST_COL, swage_desc)
+
+    else:
+        # ── Template A: Process (All BW, no socket weld section) ─────
+
+        # Pipe type boundary: NPS ≤ 16" = Seamless, NPS ≥ 18" = Welded
+        seam_end_col = SC + next((i for i, n in enumerate(STANDARD_NPS_SIZES) if float(n) >= 18), len(STANDARD_NPS_SIZES)) - 1
+        weld_start_col = seam_end_col + 1
+
+        # Row 20: TYPE — split by Seamless / Welded (matching pipe type)
+        wc(20, 1, "TYPE")
+        mw(20, SC, seam_end_col, "Butt Weld (SCH to match pipe), Seamless")
+        if weld_start_col <= LAST_COL:
+            mw(20, weld_start_col, LAST_COL, "Butt Weld (SCH to match pipe), Welded")
+
+        # Row 21: MOC — same BW material for all sizes
+        wc(21, 1, "MOC")
+        mw(21, SC, LAST_COL, bw_mat_fit)
+
+        # Rows 22-25: Elbow, Tee, Red., Cap — all ASME B 16.9
+        for label, row in [("Elbow", 22), ("Tee", 23), ("Red.", 24), ("Cap", 25)]:
+            wc(row, 1, label)
+            mw(row, SC, LAST_COL, "ASME B 16.9")
+
+        # Row 26: Plug (Hex Head, ASME B 16.11 — small bore only)
+        wc(26, 1, "Plug")
+        mw(26, SC, sb_end_col, "Hex Head, ASME B 16.11")
+        mw(26, lb_start_col, LAST_COL, "")
+
+        # Row 27: Weldolet (MSS SP 97 — all sizes)
+        wc(27, 1, "Weldolet")
+        olet_mat_n = olet_base_mat
+        if "A105" in olet_mat_n.replace(" ", "") or "A 105" in olet_mat_n:
+            olet_mat_n = "ASTM A 105N"
+        mw(27, SC, LAST_COL, f"MSS SP 97, {olet_mat_n}")
+
+        # Rows 28-30: not used for process template (no Coupling/Union/Swage)
+        # Leave empty — these rows will be hidden
+        for row in [28, 29, 30]:
+            for c in range(1, LAST_COL + 1):
+                ws.cell(row=row, column=c).value = None
+            ws.row_dimensions[row].height = 0  # Hide blank rows
 
     # ══════════════════════════════════════════════════════════════
-    # FLANGE (Rows 28-31)
+    # FLANGE (Rows 31-35)
     # ══════════════════════════════════════════════════════════════
-    mw(28, 1, LAST_COL, "Flange", bold=True)
-    ws.cell(row=28, column=1).fill = fill_section
-    for c in range(2, LAST_COL + 1):
-        ws.cell(row=28, column=c).fill = fill_section
+    _section_header(31, "Flange")
 
-    fl_moc = FLANGE_MOC.get(eff_mat, fl.get("material", "A105"))
-    face_desc = f"{piping_class}# {face_type}"
-    if face_type == "RF":
-        face_desc += ", Serrated Finish"
+    fl_moc = FLANGE_MOC.get(base_mt, fl.get("material", "ASTM A 105"))
+    if is_galv:
+        fl_moc = fl_moc + " Galvanized" if "Galvanized" not in fl_moc else fl_moc
 
-    wc(29, 1, "MOC")
-    mw(29, 2, LAST_COL, fl_moc)
+    if use_sw_small_bore:
+        # CS GALV: SW/SCRD for small bore, WN for large bore
+        wc(32, 1, "TYPE")
+        if is_galv:
+            fl_sb_type = "Screwed (SCRD)"
+        else:
+            fl_sb_type = "Socket Weld (SW)"
+        mw(32, SC, sb_end_col, fl_sb_type)
+        mw(32, lb_start_col, LAST_COL, "WN")
+    else:
+        # Process: WN for all sizes, with standard reference
+        wc(32, 1, "MOC")
+        fl_moc_n = fl_moc
+        if "A105" in fl_moc_n.replace(" ", "") or "A 105" in fl_moc_n:
+            fl_moc_n = "ASTM A 105N"
+        mw(32, 2, LAST_COL, fl_moc_n)
 
-    wc(30, 1, "FACE")
-    mw(30, 2, LAST_COL, face_desc)
+    # Row 33: MOC (Flange) / FACE
+    if use_sw_small_bore:
+        wc(33, 1, "MOC")
+        mw(33, 2, LAST_COL, fl_moc)
+    else:
+        face_desc = f"{piping_class}# {face_type}"
+        if face_type == "RF":
+            face_desc += ", Serrated Finish"
+        wc(33, 1, "FACE")
+        mw(33, 2, LAST_COL, face_desc)
 
-    wc(31, 1, "TYPE")
-    fl_std = "ASME B 16.5/ 16.47A" if int(piping_class or 150) <= 2500 else "API 6A"
-    mw(31, 2, LAST_COL, f"Weld Neck, {fl_std}, Butt Welding ends as per ASME B 16.25")
+    # Row 34: FACE / TYPE
+    if use_sw_small_bore:
+        face_desc = f"{piping_class}# {face_type}"
+        if face_type == "RF":
+            face_desc += ", Serrated Finish"
+        wc(34, 1, "FACE")
+        mw(34, 2, LAST_COL, face_desc)
+    else:
+        wc(34, 1, "TYPE")
+        mw(34, 2, LAST_COL, f"Weld Neck, ASME B 16.5/ 16.47A, Butt Welding ends as per ASME B 16.25")
+
+    # Row 35: STD
+    wc(35, 1, "STD")
+    mw(35, 2, LAST_COL, "ASME B 16.5")
 
     # ══════════════════════════════════════════════════════════════
-    # SPECTACLE BLIND / SPACER BLINDS (Rows 32-34)
+    # SPECTACLE BLIND / SPACER BLINDS (Rows 36-38)
     # ══════════════════════════════════════════════════════════════
-    mw(32, 1, LAST_COL, "Spectacle Blind/Spacer Blinds", bold=True)
-    ws.cell(row=32, column=1).fill = fill_section
-    for c in range(2, LAST_COL + 1):
-        ws.cell(row=32, column=c).fill = fill_section
+    _section_header(36, "Spectacle Blind/Spacer Blinds")
 
-    wc(33, 1, "MOC")
-    mw(33, 2, LAST_COL, fl_moc)
+    wc(37, 1, "MOC")
+    spec_blind_moc = fl_moc
+    if "A105" in spec_blind_moc.replace(" ", "") or "A 105" in spec_blind_moc:
+        if "N" not in spec_blind_moc and "Galvanized" not in spec_blind_moc:
+            spec_blind_moc = "ASTM A 105N"
+        elif "Galvanized" in spec_blind_moc:
+            spec_blind_moc = "ASTM A 105N Galvanized"
+    mw(37, 2, LAST_COL, spec_blind_moc)
 
-    wc(34, 1, "Spectacle")
-    mw(34, 2, 12, "ASME B 16.48")
-    mw(34, 13, LAST_COL, " Spacer and blind as per ASME B 16.48")
+    wc(38, 1, "Spectacle")
+    mw(38, 2, 12, "ASME B 16.48")
+    mw(38, 13, LAST_COL, "Spacer and blind as per ASME B 16.48")
 
     # ══════════════════════════════════════════════════════════════
-    # BOLTS / NUTS / GASKETS (Rows 35-38)
+    # BOLTS / NUTS / GASKETS (Rows 39-42)
     # ══════════════════════════════════════════════════════════════
-    mw(35, 1, LAST_COL, "Bolts/ Nuts/ Gaskets", bold=True)
-    ws.cell(row=35, column=1).fill = fill_section
-    for c in range(2, LAST_COL + 1):
-        ws.cell(row=35, column=c).fill = fill_section
+    _section_header(39, "Bolts/ Nuts/ Gaskets")
 
-    wc(36, 1, "Stud Bolts")
-    _key = (str(eff_mat), bool(is_nace))
-    bolt_mat = BOLT_MATERIAL.get(_key, "ASTM A 193 Gr. B7")
-    mw(36, 2, LAST_COL, bolt_mat)
-
-    wc(37, 1, "Hex Nuts")
-    nut_mat = NUT_MATERIAL.get(_key, "ASTM A 194 Gr. 2H")
-    mw(37, 2, LAST_COL, nut_mat)
-
-    wc(38, 1, "Gasket")
+    # For CS GALV bolting, use the CS key (base material type)
+    _bolt_key = (str(base_mt), bool(is_nace))
+    bolt_mat = BOLT_MATERIAL.get(_bolt_key, "ASTM A 193 Gr. B7")
+    nut_mat = NUT_MATERIAL.get(_bolt_key, "ASTM A 194 Gr. 2H")
     gasket_desc = gk.get("description") or GASKET_DESC.get(face_type, GASKET_DESC["RF"])
-    mw(38, 2, LAST_COL, gasket_desc)
+
+    # CS GALV gasket override: neoprene/EPDM rubber flat ring
+    if is_galv:
+        gasket_desc = "3mm thick flat ring of neoprene/ EPDM rubber as ASME B 16.21"
+
+    wc(40, 1, "Stud Bolt")
+    mw(40, 2, LAST_COL, bolt_mat)
+
+    wc(41, 1, "Hex Nuts")
+    mw(41, 2, LAST_COL, nut_mat)
+
+    wc(42, 1, "Gasket")
+    mw(42, 2, LAST_COL, gasket_desc)
 
     # ══════════════════════════════════════════════════════════════
-    # VALVES (Rows 39-44)
+    # VALVES (Rows 43-52)
     # ══════════════════════════════════════════════════════════════
-    mw(39, 1, LAST_COL, "Valves", bold=True)
-    ws.cell(row=39, column=1).fill = fill_section
-    for c in range(2, LAST_COL + 1):
-        ws.cell(row=39, column=c).fill = fill_section
-
-    wc(40, 1, "Rating")
-    mw(40, 2, LAST_COL, f"{piping_class}#, {face_type}")
-
-    # ── VDS tags per applicable size range ──────────────────────────
-    # Small bore (NPS ≤ 1.5") uses screwed/SW end connection
-    # Large bore (NPS ≥ 2") uses flanged end connection
-    # Valve split: first 4 NPS sizes (0.5–1.5) = small, rest = large
-    VALVE_SMALL_SPLIT = 4   # number of small-bore sizes (0.5, 0.75, 1, 1.5)
-    v_small_end_col = SC + VALVE_SMALL_SPLIT - 1   # last col of small bore
-    v_large_start_col = SC + VALVE_SMALL_SPLIT      # first col of large bore
+    _section_header(43, "Valves")
 
     try:
         pc_int = int(piping_class)
     except (TypeError, ValueError):
         pc_int = 150
-    ec_small = VALVE_END_CONNECTIONS.get((pc_int, "small"), "Socket Weld")
-    ec_large = VALVE_END_CONNECTIONS.get((pc_int, "large"), "Flanged RF")
 
-    avail_mats = VALVE_MATERIALS.get(eff_mat, VALVE_MATERIALS.get("CS", {}))
+    wc(44, 1, "Rating")
+    mw(44, 2, LAST_COL, f"{piping_class}#, {face_type}")
 
-    def make_vds(valve_type, end_conn):
-        """Generate VDS code for a valve type and end connection."""
-        mat = avail_mats.get(valve_type, {})
-        seat = mat.get("seat", "Metal") if mat else "Metal"
-        return generate_vds_code(valve_type, seat, pms_code, end_conn)
+    # ── Generate VDS codes using recommendation engine ─────────────
+    vds_rec = recommend_vds_for_class(
+        spec_code=pms_code, material_type=material_type,
+        pressure_class=pc_int, is_nace=is_nace,
+        pms_material_type=pms_material_type,
+    )
 
-    # Valve types in display order
+    # Small/large bore column split (same as fittings)
+    VALVE_SMALL_SPLIT = SB_COUNT  # 4 sizes: 0.5, 0.75, 1, 1.5
+    v_sb_end = SC + VALVE_SMALL_SPLIT - 1
+    v_lb_start = SC + VALVE_SMALL_SPLIT
+
+    # Index VDS by valve type for lookup
+    sb_vds = {v["valve_type"]: v["vds_code"] for v in vds_rec["small_bore"]}
+    lb_vds = {v["valve_type"]: v["vds_code"] for v in vds_rec["large_bore"]}
+
+    # Butterfly start col: NPS ≥ 6" = index 7 in STANDARD_NPS_SIZES → col SC+7
+    bf_start_idx = next((i for i, n in enumerate(STANDARD_NPS_SIZES) if float(n) >= 6), 7)
+    bf_start_col = SC + bf_start_idx
+
+    # Check valve: Piston for small, Swing + Dual Plate for large
+    # Dual Plate typically ≥ 6" alongside Swing
+    check_sb = sb_vds.get("Check", "")
+    check_swing = lb_vds.get("Check", "")
+    check_dp = lb_vds.get("Check (Dual Plate)", "")
+
     valve_rows = [
-        (41, "Ball"),
-        (42, "Gate"),
-        (43, "Globe"),
-        (44, "Check"),
+        (45, "Ball"),
+        (46, "Gate"),
+        (47, "Globe"),
+        (48, "Check"),
+        (49, "Butterfly"),
+        (50, "Needle"),
     ]
 
     for row, vtype in valve_rows:
         wc(row, 1, vtype)
-        tag_small = make_vds(vtype, ec_small)
-        tag_large = make_vds(vtype, ec_large)
-        if tag_small == tag_large:
-            # Same end connection for all sizes → one merged cell
-            mw(row, SC, LAST_COL, tag_small)
-        else:
-            # Different end connections → split at NPS 2"
-            mw(row, SC, v_small_end_col, tag_small)
-            mw(row, v_large_start_col, LAST_COL, tag_large)
+        sb_tag = sb_vds.get(vtype, "")
+        lb_tag = lb_vds.get(vtype, "")
 
-    # Empty rows 45-46 for additional valves
-    for r in [45, 46]:
+        if vtype == "Check":
+            # Small bore: Piston check
+            mw(row, SC, v_sb_end, check_sb)
+            # Large bore: Swing check + Dual Plate
+            if check_dp:
+                mw(row, v_lb_start, LAST_COL, f"{check_swing}, {check_dp}")
+            else:
+                mw(row, v_lb_start, LAST_COL, check_swing)
+        elif vtype == "Butterfly":
+            # Butterfly only for NPS ≥ 6"
+            mw(row, SC, bf_start_col - 1, "")
+            mw(row, bf_start_col, LAST_COL, lb_tag)
+        elif vtype == "Needle":
+            # Needle only for small bore
+            mw(row, SC, v_sb_end, sb_tag)
+            mw(row, v_lb_start, LAST_COL, "")
+        elif sb_tag == lb_tag:
+            mw(row, SC, LAST_COL, sb_tag)
+        else:
+            mw(row, SC, v_sb_end, sb_tag)
+            mw(row, v_lb_start, LAST_COL, lb_tag)
+
+    # Empty rows 51-52 for additional valves (DBB, etc.)
+    for r in [51, 52]:
         wc(r, 1, "")
         mw(r, 2, LAST_COL, "")
 
     # ══════════════════════════════════════════════════════════════
-    # NOTES (Rows 47-54)
+    # NOTES (Rows 53+)
     # ══════════════════════════════════════════════════════════════
-    mw(47, 1, LAST_COL, "Notes", bold=True)
-    ws.cell(row=47, column=1).fill = fill_section
-    for c in range(2, LAST_COL + 1):
-        ws.cell(row=47, column=c).fill = fill_section
+    _section_header(53, "Notes")
 
     notes = [
         f"1. PMS to be read in conjunction with Piping Design Basis, Doc No. {meta.get('doc_number', '50501-SPE- 80000-PP-RL-0001')} and Valve Material Specification.",
@@ -768,22 +933,24 @@ def generate_pms_excel(pms_data, output_dir):
     ]
 
     for i, note in enumerate(notes):
-        mw(48 + i, 1, LAST_COL, note, left=True)
+        mw(54 + i, 1, LAST_COL, note, left=True)
 
-    last_row = 48 + len(notes)
+    last_row = 54 + len(notes)
 
     # ══════════════════════════════════════════════════════════════
     # ROW HEIGHTS
     # ══════════════════════════════════════════════════════════════
     for r in range(1, 7):
         ws.row_dimensions[r].height = 16
-    for r in [7, 10, 19, 28, 32, 35, 39, 47]:
+    # Section headers
+    for r in [7, 10, 19, 31, 36, 39, 43, 53]:
         ws.row_dimensions[r].height = 20
     for r in range(12, 16):
         ws.row_dimensions[r].height = 15
-    for r in [20, 26, 27, 31, 34, 36, 37, 38]:
+    # Fittings (20-30), Flange (32-35), Bolts (40-42), Valves (44-52)
+    for r in list(range(20, 31)) + list(range(32, 36)) + list(range(37, 43)) + list(range(44, 53)):
         ws.row_dimensions[r].height = 28
-    for r in range(48, last_row):
+    for r in range(54, last_row):
         ws.row_dimensions[r].height = 28
 
     # ══════════════════════════════════════════════════════════════

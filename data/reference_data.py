@@ -209,7 +209,7 @@ STANDARD_OD_MM = {
     "2": 60.3, "3": 88.9, "4": 114.3, "6": 168.3, "8": 219.1,
     "10": 273.1, "12": 323.9, "14": 355.6, "16": 406.4, "18": 457,
     "20": 508, "22": 559, "24": 610, "26": 660, "28": 711, "30": 762,
-    "36": 914.4, "42": 1066.8, "48": 1219.2,
+    "32": 812.8, "36": 914.4, "42": 1066.8, "48": 1219.2,
 }
 
 # ============================================================
@@ -325,24 +325,64 @@ VALVE_MATERIALS = {
     },
 }
 
-# VDS (Valve Data Sheet) structured code mappings
-# Format: [Type 2-char][Bore/Design 1-char][Seat 1-char][Spec Code][End Conn 1-char]
-# Example: GAYMA1R = Gate + Screw&Yoke + Metal + A1 + Raised Face
+# ══════════════════════════════════════════════════════════════
+# VDS (Valve Data Sheet) Code Structure
+# Format: [Type 2-char][Bore/Design 1-char][Seat 1-char][Spec Code][End Conn 1-2 char]
+# Example: BLRTA1R = Ball + Reduced Bore + PTFE + A1 + Raised Face
+# ══════════════════════════════════════════════════════════════
+
 VDS_VALVE_TYPE_CODES = {
     "Ball": "BL", "Butterfly": "BF", "Gate": "GA", "Globe": "GL",
     "Check": "CH", "Needle": "NE", "DBB": "DB",
 }
 
+# Bore/Design codes — size-dependent for Ball and Check valves
+# Ball: R=Reduced Bore (small), F=Full Bore (large)
+# Check: P=Piston (small), S=Swing (mid), D=Dual Plate (large)
+# Butterfly: W=Wafer, T=Triple Offset (high class)
 VDS_DESIGN_CODES = {
-    "Ball": "R",       # Reduced Bore
-    "Butterfly": "W",  # Wafer
-    "Gate": "Y",       # Screw & Yoke
-    "Globe": "Y",      # Screw & Yoke
-    "Check": "P",      # Piston
-    "Needle": "I",     # Inline Straight
-    "DBB": "M",        # Modular (Ball, Needle, Ball)
+    # (valve_type, size_category) → design code
+    ("Ball", "small"):      "R",   # Reduced Bore
+    ("Ball", "large"):      "F",   # Full Bore
+    ("Gate", "small"):      "Y",   # Screw & Yoke
+    ("Gate", "large"):      "Y",   # Screw & Yoke
+    ("Globe", "small"):     "Y",   # Screw & Yoke
+    ("Globe", "large"):     "Y",   # Screw & Yoke
+    ("Check", "small"):     "P",   # Piston (works any orientation)
+    ("Check", "large"):     "S",   # Swing (standard large bore)
+    ("Check_DP", "large"):  "D",   # Dual Plate (alternative large bore)
+    ("Butterfly", "large"): "W",   # Wafer
+    ("Butterfly_TO", "large"): "T",  # Triple Offset (high pressure)
+    ("Needle", "small"):    "I",   # Straight Inline
+    ("Needle_A", "small"):  "A",   # Angle
+    ("DBB", "small"):       "R",   # Reduced bore ball-needle-ball
+    ("DBB", "large"):       "F",   # Full bore
 }
 
+# Seat codes
+VDS_SEAT_CODES = {
+    "Metal": "M", "PEEK": "P", "PTFE": "T",
+    "13Cr": "M", "Stellite": "M",
+    "PTFE/RPTFE": "T", "RPTFE": "T", "EPDM/PTFE": "T", "EPDM": "T",
+}
+
+# End connection codes by pressure class and size
+VDS_END_CONN_CODES = {
+    (150, "small"):  "R",    # Flanged RF (small bore socket weld flanges still RF)
+    (150, "large"):  "R",    # Flanged RF
+    (300, "small"):  "R",    # Flanged RF
+    (300, "large"):  "R",    # Flanged RF
+    (600, "small"):  "R",    # Flanged RF
+    (600, "large"):  "R",    # Flanged RF
+    (900, "small"):  "J",    # RTJ
+    (900, "large"):  "J",    # RTJ
+    (1500, "small"): "J",    # RTJ
+    (1500, "large"): "J",    # RTJ
+    (2500, "small"): "J",    # RTJ
+    (2500, "large"): "J",    # RTJ
+}
+
+# Valve end connection description (for display / Excel notes)
 VALVE_END_CONNECTIONS = {
     (150, "small"):  "Screwed (NPT) / Socket Weld",
     (150, "large"):  "Flanged RF",
@@ -351,11 +391,63 @@ VALVE_END_CONNECTIONS = {
     (600, "small"):  "Socket Weld / Butt Weld",
     (600, "large"):  "Flanged RF / Butt Weld",
     (900, "small"):  "Butt Weld",
-    (900, "large"):  "Flanged RF / Butt Weld",
+    (900, "large"):  "Flanged RTJ / Butt Weld",
     (1500, "small"): "Butt Weld",
     (1500, "large"): "Flanged RTJ / Butt Weld",
     (2500, "small"): "Butt Weld",
     (2500, "large"): "Flanged RTJ",
+}
+
+# Default seat material selection rules by material type and valve type
+# Key: (material_type, valve_type) → seat material code
+VDS_SEAT_SELECTION = {
+    # CS — general service
+    ("CS", "Ball"):      "T",   # PTFE for ball valves (soft seat)
+    ("CS", "Gate"):      "M",   # Metal for gate (always)
+    ("CS", "Globe"):     "M",   # Metal for globe (always)
+    ("CS", "Check"):     "M",   # Metal for check (always)
+    ("CS", "Butterfly"): "T",   # PTFE for butterfly (soft seat)
+    ("CS", "Needle"):    "P",   # PEEK for needle
+    ("CS", "DBB"):       "P",   # PEEK for DBB
+
+    # CS GALV — same as CS
+    ("CS GALV", "Ball"):      "T",
+    ("CS GALV", "Gate"):      "M",
+    ("CS GALV", "Globe"):     "M",
+    ("CS GALV", "Check"):     "M",
+    ("CS GALV", "Butterfly"): "T",
+    ("CS GALV", "Needle"):    "P",
+
+    # CS-LT — low temperature
+    ("CS-LT", "Ball"):      "T",
+    ("CS-LT", "Gate"):      "M",
+    ("CS-LT", "Globe"):     "M",
+    ("CS-LT", "Check"):     "M",
+    ("CS-LT", "Butterfly"): "T",
+    ("CS-LT", "Needle"):    "P",
+
+    # SS — stainless steel
+    ("SS", "Ball"):      "T",
+    ("SS", "Gate"):      "M",
+    ("SS", "Globe"):     "M",
+    ("SS", "Check"):     "M",
+    ("SS", "Butterfly"): "T",
+    ("SS", "Needle"):    "P",
+
+    # Alloy — high temp → metal seats
+    ("Alloy", "Ball"):      "M",
+    ("Alloy", "Gate"):      "M",
+    ("Alloy", "Globe"):     "M",
+    ("Alloy", "Check"):     "M",
+    ("Alloy", "Butterfly"): "M",
+    ("Alloy", "Needle"):    "M",
+}
+
+# Valve applicability by size range
+# Which valve types are applicable per size category
+VALVE_SIZE_APPLICABILITY = {
+    "small": ["Ball", "Gate", "Globe", "Check", "Needle", "DBB"],
+    "large": ["Ball", "Gate", "Globe", "Check", "Butterfly"],
 }
 
 # Joint efficiency factors (ASME B31.3)

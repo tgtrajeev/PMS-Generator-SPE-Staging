@@ -1,6 +1,7 @@
 """
 Module 6: Pipe & Fittings Material Assignment
-Per ASME B16.9 (BW), ASME B16.11 (SW/THD Forged), MSS SP-97 (Weldolet), ASME B31.3.
+Per ASME B16.9 (BW), ASME B16.11 (SW/THD Forged), MSS SP-97 (Olet),
+MSS SP-95 (Swage), BS 3799 (Union), ASME B31.3.
 """
 
 import sys
@@ -11,7 +12,6 @@ from data.reference_data import FITTING_MATERIALS, PIPE_DIMENSIONS_B36_10
 
 
 # ── Forged fitting material mapping (ASME B16.11) ────────────
-# Maps pipe material → forged fitting material for SW/THD fittings
 FORGED_MATERIAL = {
     "A106 Gr.B":   "ASTM A105",
     "A53 Gr.B":    "ASTM A105",
@@ -22,48 +22,59 @@ FORGED_MATERIAL = {
     "A335 P22":    "ASTM A182 F22",
 }
 
-# ── Weldolet material mapping (MSS SP-97) ─────────────────────
+# ── Weldolet / Olet material mapping (MSS SP-97) ────────────
 WELDOLET_MATERIAL = {
-    "A106 Gr.B":   "ASTM A105 (MSS SP-97)",
-    "A53 Gr.B":    "ASTM A105 (MSS SP-97)",
-    "A333 Gr.6":   "ASTM A350 LF2 (MSS SP-97)",
-    "A312 TP304":  "ASTM A182 F304 (MSS SP-97)",
-    "A312 TP316":  "ASTM A182 F316 (MSS SP-97)",
-    "A335 P11":    "ASTM A182 F11 (MSS SP-97)",
-    "A335 P22":    "ASTM A182 F22 (MSS SP-97)",
+    "A106 Gr.B":   "ASTM A105",
+    "A53 Gr.B":    "ASTM A105",
+    "A333 Gr.6":   "ASTM A350 LF2",
+    "A312 TP304":  "ASTM A182 F304",
+    "A312 TP316":  "ASTM A182 F316",
+    "A335 P11":    "ASTM A182 F11",
+    "A335 P22":    "ASTM A182 F22",
+}
+
+# ── BW fitting material mapping (ASME B16.9) ─────────────────
+BW_MATERIAL = {
+    "A106 Gr.B":   "ASTM A 234 Gr. WPB",
+    "A53 Gr.B":    "ASTM A 234 Gr. WPB",
+    "A333 Gr.6":   "ASTM A 420 Gr. WPL6",
+    "A312 TP304":  "ASTM A 403 WP304",
+    "A312 TP316":  "ASTM A 403 WP316",
+    "A335 P11":    "ASTM A 234 WP11",
+    "A335 P22":    "ASTM A 234 WP22",
 }
 
 
+def _is_galv(pms_mat):
+    """Check if material is CS Galvanized."""
+    return pms_mat.upper().replace(" ", "_").replace("-", "_") in ("CS_GALV", "CS_GALVANIZED")
+
+
 def assign_fittings(material_grade, pipe_size_nps, schedule, material_type,
-                    pms_material_type=None, service="", is_nace=False, is_low_temp=False):
+                    pms_material_type=None, service="", is_nace=False, is_low_temp=False,
+                    flange_class=150):
     """
     Assign material specifications for pipe fittings per:
     - ASME B16.9 (BW fittings, NPS > 2")
     - ASME B16.11 (Forged SW/THD fittings, NPS ≤ 2")
-    - MSS SP-97 (Weldolet/branch outlets)
+    - MSS SP-97 (Olet / branch outlets)
+    - MSS SP-95 (Swage nipples)
+    - BS 3799 (Unions, large bore)
     - ASME B31.3 (design rules)
 
-    Args:
-        material_grade: e.g., "A106 Gr.B"
-        pipe_size_nps: Nominal Pipe Size (string)
-        schedule: Selected pipe schedule
-        material_type: CS, CS-LT, SS, Alloy (base type)
-        pms_material_type: Original material selection (e.g. "CS GALV", "CuNi")
-        service: Service description string
-        is_nace: NACE MR0175 compliance required
-        is_low_temp: Low temperature service
-
     Returns:
-        dict with fitting assignments
+        dict with fitting assignments for PMS sheet format
     """
     pms_mat = pms_material_type or material_type or "CS"
+    is_galv = _is_galv(pms_mat)
 
-    # ── BW fitting materials (ASME B16.9) ─────────────────────
-    fittings = FITTING_MATERIALS.get(material_grade)
-    if not fittings:
-        # Fallback to CS defaults
-        fittings = {"elbow": "A234 WPB", "tee": "A234 WPB",
-                     "reducer": "A234 WPB", "cap": "A234 WPB"}
+    # ── Size classification ───────────────────────────────────
+    try:
+        size_num = float(pipe_size_nps)
+        is_small_bore = size_num <= 1.5
+    except ValueError:
+        size_num = 0
+        is_small_bore = False
 
     # ── Schedule / class label ────────────────────────────────
     if schedule in ("5S", "10S"):
@@ -79,124 +90,157 @@ def assign_fittings(material_grade, pipe_size_nps, schedule, material_type,
     else:
         fitting_class = f"Sch {schedule}"
 
-    # ── Size classification ───────────────────────────────────
-    try:
-        size_num = float(pipe_size_nps)
-        is_small_bore = size_num <= 2.0
-    except ValueError:
-        size_num = 0
-        is_small_bore = False
-
-    # ── 4.1 TYPE: Forged (≤2") vs Wrought BW (>2") ───────────
-    if is_small_bore:
-        fitting_type = "Forged"
-        fitting_standard = "ASME B16.11"
-    else:
-        fitting_type = "Seamless" if schedule in ("160", "XXS") else "Wrought Seamless"
-        fitting_standard = "ASME B16.9"
-
-    # ── 4.2 MOC ───────────────────────────────────────────────
-    bw_mat = fittings.get("elbow", "A234 WPB")
+    # ── Base materials ────────────────────────────────────────
     forged_mat = FORGED_MATERIAL.get(material_grade, "ASTM A105")
-    weldolet_mat = WELDOLET_MATERIAL.get(material_grade, "ASTM A105 (MSS SP-97)")
+    bw_mat = BW_MATERIAL.get(material_grade, "ASTM A 234 Gr. WPB")
+    olet_mat = WELDOLET_MATERIAL.get(material_grade, "ASTM A105")
 
-    # ── 4.3 End Connection ────────────────────────────────────
-    if is_small_bore:
-        if material_type in ("CS", "CS-LT") or pms_mat.upper().replace(" ", "_") in ("CS_GALV",):
-            connection = "Socket Weld (SW)"
-        elif material_type == "SS":
-            connection = "Socket Weld (SW) / Butt Weld (BW)"
+    # ── Galvanized suffix ─────────────────────────────────────
+    galv_suffix = ""
+    if is_galv:
+        galv_suffix = ", Galvanized"
+        # CS GALV uses Normalized forged material
+        if forged_mat == "ASTM A105":
+            forged_mat = "ASTM A 105N"
+
+    # ── Template: CS GALV uses SW/SCRD small bore; all others use all-BW ──
+    use_sw_small_bore = is_galv
+
+    # Normalize olet material to "N" (Normalized) for CS
+    olet_mat_n = olet_mat
+    if "A105" in olet_mat.replace(" ", "") or "A 105" in olet_mat:
+        olet_mat_n = "ASTM A 105N"
+
+    if use_sw_small_bore and is_small_bore:
+        # ── Template B: CS GALV small bore → SW/SCRD, ASME B16.11 ──
+        if is_galv:
+            fitting_type = "Screwed (SCRD), #3000"
+            connection = "Screwed (SCRD)"
         else:
+            fitting_type = "Socket Weld (SW), #3000"
             connection = "Socket Weld (SW)"
-    else:
-        connection = "Butt Weld (BW)"
+        fitting_standard = "ASME B16.11"
+        moc = forged_mat + galv_suffix if galv_suffix else forged_mat
+        comp_std = "ASME B16.11"
 
-    # ── Small bore forged fittings (ASME B16.11) ──────────────
-    if is_small_bore:
-        small_bore_fittings = {
-            "coupling": {"material": forged_mat, "standard": "ASME B16.11", "rating": "3000# / 6000#"},
-            "half_coupling": {"material": forged_mat, "standard": "ASME B16.11", "rating": "3000# / 6000#"},
-            "plug": {"material": forged_mat, "standard": "ASME B16.11", "type": "Round Head / Hex Head"},
+        # Components
+        elbow   = {"standard": comp_std, "material": moc}
+        tee     = {"standard": comp_std, "material": moc}
+        reducer = {"standard": comp_std, "material": moc}
+        cap     = {"standard": comp_std, "material": moc}
+        coupling = {"standard": comp_std, "material": forged_mat + galv_suffix}
+        hex_head_plug = {
+            "standard": comp_std,
+            "material": forged_mat + galv_suffix,
+            "description": f"Hex Head Plug, {comp_std}",
         }
+        union = {"standard": comp_std, "material": forged_mat + galv_suffix}
+        olet  = {"standard": "MSS SP 97", "material": olet_mat + galv_suffix}
+        swage = {
+            "standard": "MSS SP 95",
+            "material": f"MOC Same as pipe{galv_suffix}",
+            "description": f"MSS SP 95, MOC Same as pipe{galv_suffix}",
+        }
+
     else:
-        small_bore_fittings = {}
+        # ── Template A: Process (all sizes BW) or GALV large bore ──
+        fitting_type = "Butt Weld (SCH to match pipe), Seamless"
+        fitting_standard = "ASME B16.9"
+        moc = bw_mat + (", Seamless" + galv_suffix if galv_suffix else ", Seamless")
+        connection = "Butt Weld (BW)"
+        comp_std = "ASME B16.9"
+
+        # Components — all BW
+        elbow   = {"standard": comp_std, "material": moc}
+        tee     = {"standard": comp_std, "material": moc}
+        reducer = {"standard": comp_std, "material": moc}
+        cap     = {"standard": comp_std, "material": moc}
+        coupling = None  # No coupling for BW
+
+        # Plug: Hex Head ASME B16.11 (small bore only, even in BW template)
+        if is_small_bore:
+            hex_head_plug = {
+                "standard": "ASME B16.11",
+                "material": forged_mat + galv_suffix,
+                "description": f"Hex Head, ASME B16.11",
+            }
+        else:
+            hex_head_plug = None
+
+        # Union: BS 3799 for large bore (none for small bore in BW template)
+        if is_small_bore:
+            union = None
+        else:
+            union = {"standard": "BS 3799", "material": bw_mat + galv_suffix}
+
+        # Olet: MSS SP 97
+        olet = {
+            "standard": "MSS SP 97",
+            "material": olet_mat_n + galv_suffix,
+            "description": f"MSS SP 97, {olet_mat_n}{galv_suffix}",
+        }
+
+        # Swage: not applicable for process BW template
+        if is_galv:
+            swage = {
+                "standard": "MSS SP 95",
+                "material": f"MOC Same as pipe{galv_suffix}",
+                "description": f"MSS SP 95, MOC Same as pipe{galv_suffix}",
+            }
+        else:
+            swage = None
+
+    # ── Pipe data ─────────────────────────────────────────────
+    pipe = {
+        "material": material_grade,
+        "schedule": schedule,
+        "connection": connection,
+        "size": f"NPS {pipe_size_nps}",
+    }
 
     # ── Build result ──────────────────────────────────────────
     result = {
         "fitting_type": fitting_type,
         "fitting_standard": fitting_standard,
-        "moc": bw_mat if not is_small_bore else forged_mat,
-        "pipe": {
-            "material": material_grade,
-            "schedule": schedule,
-            "connection": connection,
-            "size": f"NPS {pipe_size_nps}",
-        },
-        # 4.4 ELBOW — 90° LR default (ASME B16.9 / B16.11)
-        "elbow_90": {
-            "type": "90° Long Radius (LR) Elbow",
-            "material": bw_mat if not is_small_bore else forged_mat,
-            "schedule": fitting_class,
-            "standard": fitting_standard,
-        },
-        "elbow_45": {
-            "type": "45° Elbow",
-            "material": bw_mat if not is_small_bore else forged_mat,
-            "schedule": fitting_class,
-            "standard": fitting_standard,
-        },
-        # 4.5 TEE — Equal and Reducing
-        "tee_equal": {
-            "type": "Equal Tee",
-            "material": fittings["tee"] if not is_small_bore else forged_mat,
-            "schedule": fitting_class,
-            "standard": fitting_standard,
-        },
-        "tee_reducing": {
-            "type": "Reducing Tee",
-            "material": fittings["tee"] if not is_small_bore else forged_mat,
-            "schedule": fitting_class,
-            "standard": fitting_standard,
-        },
-        # 4.6 REDUCER — Concentric (vertical) / Eccentric (horizontal liquid)
-        "reducer_concentric": {
-            "type": "Concentric Reducer",
-            "material": fittings["reducer"] if not is_small_bore else forged_mat,
-            "schedule": fitting_class,
-            "standard": fitting_standard,
-            "note": "Use for vertical lines",
-        },
-        "reducer_eccentric": {
-            "type": "Eccentric Reducer (Flat Bottom Up)",
-            "material": fittings["reducer"] if not is_small_bore else forged_mat,
-            "schedule": fitting_class,
-            "standard": fitting_standard,
-            "note": "Use for horizontal liquid lines (flat bottom)",
-        },
-        # 4.7 CAP — BW permanent closure
-        "cap": {
-            "type": "Pipe Cap (BW)",
-            "material": fittings["cap"] if not is_small_bore else forged_mat,
-            "schedule": fitting_class,
-            "standard": fitting_standard,
-        },
-        # 4.8 PLUG — Only for ≤ 2" SW/THD
-        "plug": {
-            "type": "Plug (Round Head)" if is_small_bore else "N/A (use BW Cap)",
-            "material": forged_mat if is_small_bore else "N/A",
-            "standard": "ASME B16.11" if is_small_bore else "N/A",
-        },
-        # 4.5 WELDOLET — MSS SP-97 (for branch < 50% of header)
-        "weldolet": {
-            "type": "Weldolet",
-            "material": weldolet_mat,
-            "standard": "MSS SP-97",
-            "note": "Use when branch < 50% of header size",
-        },
-        "small_bore_fittings": small_bore_fittings,
+        "moc": moc,
+        "connection": connection,
+        "pipe": pipe,
+        "elbow": elbow,
+        "tee": tee,
+        "reducer": reducer,
+        "cap": cap,
+        "coupling": coupling,
+        "hex_head_plug": hex_head_plug,
+        "union": union,
+        "olet": olet,
+        "swage": swage,
         "is_small_bore": is_small_bore,
         "material_type": material_type,
         "pms_material_type": pms_mat,
+        "is_galvanized": is_galv,
+        "use_sw_small_bore": use_sw_small_bore,
+        # Keep legacy keys for backward compatibility
+        "elbow_90": {"type": "90° LR Elbow", "material": elbow["material"],
+                     "schedule": fitting_class, "standard": comp_std},
+        "elbow_45": {"type": "45° Elbow", "material": elbow["material"],
+                     "schedule": fitting_class, "standard": comp_std},
+        "tee_equal": {"type": "Equal Tee", "material": tee["material"],
+                      "schedule": fitting_class, "standard": comp_std},
+        "tee_reducing": {"type": "Reducing Tee", "material": tee["material"],
+                         "schedule": fitting_class, "standard": comp_std},
+        "reducer_concentric": {"type": "Concentric Reducer", "material": reducer["material"],
+                               "schedule": fitting_class, "standard": comp_std},
+        "reducer_eccentric": {"type": "Eccentric Reducer", "material": reducer["material"],
+                              "schedule": fitting_class, "standard": comp_std},
+        "cap_legacy": {"type": "Pipe Cap", "material": cap["material"],
+                       "schedule": fitting_class, "standard": comp_std},
+        "plug": hex_head_plug if is_small_bore else {"type": "N/A", "material": "N/A", "standard": "N/A"},
+        "weldolet": olet,
+        "small_bore_fittings": {
+            "coupling": {"material": (forged_mat + galv_suffix).strip(", "), "standard": "ASME B16.11", "rating": "#3000"},
+            "half_coupling": {"material": (forged_mat + galv_suffix).strip(", "), "standard": "ASME B16.11", "rating": "#3000"},
+            "plug": hex_head_plug,
+        } if (is_small_bore and use_sw_small_bore) else {},
         "branch_reinforcement": {},
     }
 
@@ -219,31 +263,22 @@ def assign_fittings(material_grade, pipe_size_nps, schedule, material_type,
         pass
 
     # ── Console summary ───────────────────────────────────────
+    bore = "Small Bore" if is_small_bore else "Large Bore"
     print(f"\n{'=' * 65}")
-    print(f"  PIPE & FITTINGS MATERIAL ASSIGNMENT")
-    print(f"  Standard: {fitting_standard} | Type: {fitting_type}")
-    print(f"  MOC: {result['moc']}")
+    print(f"  FITTINGS DATA — {bore}")
+    print(f"  TYPE: {fitting_type}")
+    print(f"  MOC:  {moc}")
     print(f"{'=' * 65}")
-    print(f"\n  Pipe: {material_grade}, NPS {pipe_size_nps}, {fitting_class}")
-    print(f"  Connection: {connection}")
-    print(f"\n  {'Component':<25} {'Material':<25} {'Standard'}")
-    print(f"  {'-'*25} {'-'*25} {'-'*15}")
-    components = [
-        ("90° LR Elbow", result["elbow_90"]),
-        ("45° Elbow", result["elbow_45"]),
-        ("Equal Tee", result["tee_equal"]),
-        ("Reducing Tee", result["tee_reducing"]),
-        ("Concentric Reducer", result["reducer_concentric"]),
-        ("Eccentric Reducer", result["reducer_eccentric"]),
-        ("Cap", result["cap"]),
-        ("Weldolet", result["weldolet"]),
-    ]
-    if is_small_bore:
-        components.append(("Plug", result["plug"]))
-    for name, comp in components:
-        mat = comp.get("material", "N/A")
-        std = comp.get("standard", "")
-        print(f"  {name:<25} {mat:<25} {std}")
+    for label, comp in [("Elbow", elbow), ("Tee", tee), ("Red.", reducer),
+                        ("Cap", cap), ("Olet", olet), ("Swage", swage)]:
+        if comp:
+            print(f"  {label:<15} {comp.get('standard','')}")
+    if coupling:
+        print(f"  {'Coupl':<15} {coupling['standard']}")
+    if hex_head_plug:
+        print(f"  {'Hex Hd.Plug':<15} {hex_head_plug['description']}")
+    if union:
+        print(f"  {'Union':<15} {union['standard']}")
     print(f"  {'-' * 65}")
 
     return result

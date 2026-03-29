@@ -3,6 +3,7 @@ Calculations API router - spec code, thickness calculation, schedule selection.
 """
 
 import io
+import math
 from contextlib import redirect_stdout
 
 from typing import Optional
@@ -198,8 +199,9 @@ async def full_schedule_table(req: FullScheduleTableRequest):
     is_chloride = "chloride" in svc
     is_corr     = any(k in svc for k in ["corrosive", "acid", "sour", "h2s", "flare"])
 
-    # Minimum schedule applies for NACE / LT / corrosive service
-    has_svc_min = req.is_nace or req.is_low_temp or is_sour or is_acid or is_corr
+    # Schedule bump only from explicit UI checkboxes (NACE / Low Temp)
+    # Service keywords (sour, acid, corrosive) are used for engineering flags only
+    has_svc_min = req.is_nace or req.is_low_temp
 
     # ── 6. Engineering flags ──────────────────────────────────────────────────
     P_barg       = round(P * 0.0689476, 1)
@@ -390,7 +392,7 @@ async def full_schedule_table(req: FullScheduleTableRequest):
     })
 
     # ── 7. Per-NPS calculation ────────────────────────────────────────────────
-    nps_list = sorted([n for n in dim_table.keys() if float(n) <= 30], key=lambda x: float(x))
+    nps_list = sorted([n for n in dim_table.keys() if float(n) <= 36], key=lambda x: float(x))
     rows     = []
     min_mawp = float("inf")
     max_mawp = 0.0
@@ -433,12 +435,18 @@ async def full_schedule_table(req: FullScheduleTableRequest):
             if wt > 0:
                 base_min_wt_in, base_min_sch = wt, "80"
                 base_label = 'Sch 80 (NPS 2"\u20136")'
-        elif nps_f >= 8.0:
-            # NPS ≥ 8" → STD (Standard Wall)
+        elif nps_f <= 28.0:
+            # 8" ≤ NPS ≤ 28" → STD (Standard Wall)
             wt = schedules.get("Std", schedules.get("40", 0))
             if wt > 0:
                 base_min_wt_in, base_min_sch = wt, "Std"
-                base_label = 'STD (NPS \u2265 8")'
+                base_label = 'STD (NPS 8"\u201328")'
+        elif nps_f >= 30.0:
+            # NPS ≥ 30" → XS (Extra Strong) minimum
+            wt = schedules.get("XS", schedules.get("80", 0))
+            if wt > 0:
+                base_min_wt_in, base_min_sch = wt, "XS"
+                base_label = 'XS (NPS \u2265 30")'
 
         # Layer 2 — Service / CA bumps (increase one schedule from base)
         # NOTE: NPS ≤ 1.5" already uses Sch 160 (maximum practical small-bore schedule)
@@ -452,10 +460,14 @@ async def full_schedule_table(req: FullScheduleTableRequest):
 
         if bump_reasons and base_min_sch and nps_f > 1.5:
             # Only bump for NPS > 1.5" (small bore Sch 160 is already the cap)
+            # Find next schedule with STRICTLY GREATER wall thickness
             for i, (sch, wt) in enumerate(sorted_scheds):
-                if sch == base_min_sch and i + 1 < len(sorted_scheds):
-                    base_min_wt_in = sorted_scheds[i + 1][1]
-                    base_min_sch   = sorted_scheds[i + 1][0]
+                if sch == base_min_sch:
+                    for j in range(i + 1, len(sorted_scheds)):
+                        if sorted_scheds[j][1] > wt + 0.001:
+                            base_min_wt_in = sorted_scheds[j][1]
+                            base_min_sch   = sorted_scheds[j][0]
+                            break
                     break
 
         # Layer 3 — Select schedule: PMS minimum or pressure, whichever is heavier
@@ -473,19 +485,26 @@ async def full_schedule_table(req: FullScheduleTableRequest):
                 governs = f"PMS minimum — {base_label}"
         else:
             # Pressure governs — find lightest schedule that meets t_min
-            # Prefer named schedules (Std, XS) over numeric when WT is identical
             for sch, wt in sorted_scheds:
                 if wt >= t_min_in:
                     sel_sch, sel_wt_in = sch, wt
-                    # Check if a named schedule (Std/XS) has the same WT
-                    for named in ("Std", "XS"):
-                        if named != sch and named in schedules and abs(schedules[named] - wt) < 0.001:
-                            sel_sch = named
+                    # Prefer PMS-standard labels over aliases when same WT:
+                    # "Std" over numeric (e.g., "40"), "80" over "XS"
+                    if "Std" in schedules and abs(schedules["Std"] - wt) < 0.001:
+                        sel_sch = "Std"
                     break
             if sel_sch is None and sorted_scheds:
                 sel_sch, sel_wt_in = sorted_scheds[-1]
             if base_min_wt_in > 0:
                 governs = "Pressure (exceeds PMS minimum)"
+
+        # Normalize labels: prefer "80" over "XS" (same WT for NPS ≤ 8")
+        # and "Std" over numeric when identical WT
+        if sel_sch == "XS" and "80" in schedules and abs(schedules["80"] - schedules.get("XS", -1)) < 0.001:
+            sel_sch = "80"
+        if sel_sch and sel_sch not in ("Std", "XS", "XXS") and "Std" in schedules:
+            if sel_wt_in is not None and abs(schedules["Std"] - sel_wt_in) < 0.001:
+                sel_sch = "Std"
 
         # Hydrogen service: bump one schedule heavier for conservatism
         # Skip for NPS ≤ 1.5" (Sch 160 is already the maximum practical small-bore schedule)
@@ -499,7 +518,7 @@ async def full_schedule_table(req: FullScheduleTableRequest):
         if sel_wt_in is None:
             continue
 
-        wt_nom_mm = round(sel_wt_in * 25.4, 2)
+        wt_nom_mm = round(sel_wt_in * 25.4 + 1e-9, 2)  # round half-up (compensate float precision)
 
         # Effective (net) wall thickness after mill tolerance and CA
         t_eff_in  = sel_wt_in * (1.0 - mill_tol) - c_in - m_in

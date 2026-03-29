@@ -24,6 +24,7 @@ class FittingsRequest(BaseModel):
     service: str = ""
     is_nace: bool = False
     is_low_temp: bool = False
+    flange_class: int = 150
 
 
 class FlangesRequest(BaseModel):
@@ -54,6 +55,7 @@ async def api_assign_fittings(req: FittingsRequest):
             service=req.service,
             is_nace=req.is_nace,
             is_low_temp=req.is_low_temp,
+            flange_class=req.flange_class,
         )
     return result
 

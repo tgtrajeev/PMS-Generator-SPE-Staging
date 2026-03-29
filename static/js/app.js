@@ -1252,11 +1252,16 @@ const App = {
     async calcFittings() {
         this.showLoading('Assigning fittings materials...');
         try {
+            const pmsMat = this.data.msr.pms_material_type || this.data.msr.material_type || 'CS';
             const body = (nps) => JSON.stringify({
                 material_grade: this.data.msr.material_grade,
                 pipe_size: nps,
                 schedule: this.data.schedule.selected_schedule,
                 material_type: this.data.msr.material_type,
+                pms_material_type: pmsMat,
+                service: this.data.line_list?.service || '',
+                is_nace: this.data.line_list?.is_nace || false,
+                is_low_temp: this.data.line_list?.is_low_temp || false,
             });
             const opts = { method: 'POST', headers: { 'Content-Type': 'application/json' } };
             const [sbRes, lbRes] = await Promise.all([
@@ -1268,8 +1273,6 @@ const App = {
                 large_bore: await lbRes.json(),
             };
             this.renderFittings();
-            // Fetch and render the branch table for the selected material
-            this.fetchBranchTable();
         } catch (e) {
             console.error(e);
             this.showToast('Fittings assignment failed.', 'error');
@@ -1277,130 +1280,120 @@ const App = {
         this.hideLoading();
     },
 
-    async fetchBranchTable() {
-        try {
-            const matType = this.data.msr.material_type || 'CS';
-            const res = await fetch('/api/branch_table', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ material_type: matType }),
-            });
-            const chart = await res.json();
-            if (chart.error) {
-                console.warn('Branch table:', chart.error);
-                return;
-            }
-            this.data.branch_chart = chart;
-            this.renderBranchTable(chart);
-        } catch (e) {
-            console.error('Branch table fetch failed:', e);
-        }
-    },
-
-    renderBranchTable(chart) {
-        const section = document.getElementById('branch-table-section');
-        if (!section) return;
-        section.style.display = 'block';
-
-        // Title
-        document.getElementById('branch-chart-title').textContent = chart.title + ' — Branch Table as per API RP 14E';
-
-        // Legend
-        const legendEl = document.getElementById('branch-legend');
-        const legendParts = Object.entries(chart.legend).map(([code, name]) => {
-            const colors = { W: '#2c3e50', T: '#1a6b3c', H: '#8b4513', S: '#6c3483', RT: '#d4a017', '-': '#999' };
-            const bg = { W: '#eaf2f8', T: '#e8f8f0', H: '#fdf2e9', S: '#f4ecf7', RT: '#fef9e7', '-': '#f0f0f0' };
-            return `<span style="display:inline-block;margin:2px 10px 2px 0;padding:3px 10px;border-radius:4px;background:${bg[code]||'#f0f0f0'};border:1px solid ${colors[code]||'#ccc'};font-weight:600;font-size:0.85em;">
-                <span style="color:${colors[code]||'#333'}">${code}</span> = ${name}</span>`;
-        });
-        legendEl.innerHTML = '<strong>Legend:</strong> ' + legendParts.join('');
-
-        // Matrix table
-        const branches = chart.branch_sizes;
-        let html = '<table class="result-table" style="font-size:0.82em;text-align:center;border-collapse:collapse;width:auto;">';
-
-        // Header row: Branch Pipe sizes
-        html += '<thead><tr><th style="background:#1a5276;color:#fff;padding:6px 8px;position:sticky;left:0;z-index:2;">Run \\ Branch</th>';
-        for (const b of branches) {
-            const lbl = b <= 1 ? '\u22641' : String(b);
-            html += `<th style="background:#1a5276;color:#fff;padding:6px 6px;min-width:36px;font-size:0.9em;">${lbl}</th>`;
-        }
-        html += '</tr></thead><tbody>';
-
-        // Data rows
-        const cellColors = { W: '#2c3e50', T: '#1a6b3c', H: '#8b4513', S: '#6c3483', RT: '#d4a017', '-': '#bbb' };
-        const cellBg =     { W: '#eaf2f8', T: '#e8f8f0', H: '#fdf2e9', S: '#f4ecf7', RT: '#fef9e7', '-': '#f9f9f9' };
-
-        for (const row of chart.rows) {
-            const runLabel = row.run_nps <= 1 ? '\u22641' : String(row.run_nps);
-            html += `<tr><td style="background:#f0f4f7;font-weight:700;padding:5px 8px;text-align:left;position:sticky;left:0;z-index:1;border-right:2px solid #1a5276;">${runLabel}</td>`;
-            for (let i = 0; i < branches.length; i++) {
-                const val = row.cells[i];
-                if (val && branches[i] <= row.run_nps) {
-                    const bg = cellBg[val] || '#fff';
-                    const fg = cellColors[val] || '#333';
-                    const isDiag = branches[i] === row.run_nps;
-                    const border = isDiag ? 'border:2px solid #1a5276;' : '';
-                    html += `<td style="background:${bg};color:${fg};font-weight:700;padding:4px 2px;${border}">${val}</td>`;
-                } else {
-                    html += '<td style="background:#f7f7f7;"></td>';
-                }
-            }
-            html += '</tr>';
-        }
-        html += '</tbody></table>';
-
-        // Labels
-        html += '<div style="display:flex;justify-content:space-between;margin-top:6px;font-size:0.8em;color:#666;">';
-        html += '<span>\u2191 <strong>RUN PIPE</strong></span>';
-        html += '<span><strong>BRANCH PIPE</strong> \u2192</span>';
-        html += '</div>';
-
-        document.getElementById('branch-table-container').innerHTML = html;
-    },
-
     renderFittings() {
-        const buildSection = (f, label, npsRange) => {
-            const items = [
-                ['Pipe', f.pipe],
-                ['90\u00b0 LR Elbow', f.elbow_90],
-                ['45\u00b0 Elbow', f.elbow_45],
-                ['Equal Tee', f.tee_equal],
-                ['Reducing Tee', f.tee_reducing],
-                ['Concentric Reducer', f.reducer_concentric],
-                ['Eccentric Reducer', f.reducer_eccentric],
-                ['Pipe Cap', f.cap],
-            ];
-            if (f.small_bore_fittings) {
-                items.push(['Coupling (SW)', f.small_bore_fittings.coupling]);
-                items.push(['Half-Coupling (SW)', f.small_bore_fittings.half_coupling]);
-            }
-            const rows = items.map(([name, d]) => `
-                <tr>
-                    <td><strong>${name}</strong></td>
-                    <td>${d?.material || 'N/A'}</td>
-                    <td>${d?.schedule || d?.standard || ''}</td>
-                    <td>${d?.standard || 'ASTM'}</td>
-                </tr>`).join('');
-            return `
-                <h4 style="margin:18px 0 8px;color:#1a5276;border-bottom:2px solid #1a5276;padding-bottom:4px">
-                    ${label} <small style="color:#666;font-weight:normal">(NPS ${npsRange})</small>
-                </h4>
-                <div class="info-box" style="margin-bottom:8px">
-                    <strong>Connection:</strong> ${f.pipe?.connection || 'Butt Weld'} &nbsp;|&nbsp;
-                    <strong>Schedule:</strong> ${f.pipe?.schedule || ''}
-                </div>
-                <table class="result-table">
-                    <thead><tr><th>Component</th><th>Material</th><th>Schedule/Class</th><th>Standard</th></tr></thead>
-                    <tbody>${rows}</tbody>
-                </table>`;
-        };
-
         const sb = this.data.fittings.small_bore;
         const lb = this.data.fittings.large_bore;
-        document.getElementById('fittings-result').innerHTML =
-            buildSection(sb, 'Small Bore', '\u00bd\u2033 \u2013 2\u2033') +
-            buildSection(lb, 'Large Bore', '2\u00bd\u2033 \u2013 36\u2033');
+
+        // Helper: get cell value for a component
+        const cellVal = (comp, fallbackStd) => {
+            if (!comp) return '';
+            if (comp.description) return comp.description;
+            return comp.standard || fallbackStd || '';
+        };
+
+        // Detect template: CS GALV uses SW small bore; all others use all-BW (process)
+        const useSW = sb.use_sw_small_bore || sb.is_galvanized || false;
+
+        // Branch reinforcement (shared)
+        let reinfHtml = '';
+        const br = lb.branch_reinforcement;
+        if (br && br.A_required > 0) {
+            const color = br.adequate ? '#1e8449' : '#c0392b';
+            const icon = br.adequate ? '\u2705' : '\u26a0\ufe0f';
+            reinfHtml = `
+            <div class="info-box" style="margin-top:10px;border-left:3px solid ${color}">
+                <strong>${icon} Branch Reinforcement (ASME B31.3 \u00a7304.3):</strong>
+                A<sub>req</sub> = ${br.A_required} in\u00b2, A<sub>avail</sub> = ${br.A_available} in\u00b2
+                ${br.pad_required ? '<span style="color:#c0392b;font-weight:700"> \u2014 Reinforcement pad required (deficit: ' + br.deficit + ' in\u00b2)</span>' : '<span style="color:#1e8449"> \u2014 Adequate</span>'}
+            </div>`;
+        }
+
+        let tableHtml = '';
+
+        if (useSW) {
+            // ── Template B: CS GALV — SW/SCRD small bore + BW large bore ──
+            const pmsRows = [
+                { label: 'TYPE',        sb: sb.fitting_type || '',  lb: lb.fitting_type || '' },
+                { label: 'MOC',         sb: sb.moc || '',           lb: lb.moc || '' },
+                { label: 'Elbow',       sb: cellVal(sb.elbow),      lb: cellVal(lb.elbow) },
+                { label: 'Tee',         sb: cellVal(sb.tee),        lb: cellVal(lb.tee) },
+                { label: 'Red.',        sb: cellVal(sb.reducer),    lb: cellVal(lb.reducer) },
+                { label: 'Cap',         sb: cellVal(sb.cap),        lb: cellVal(lb.cap) },
+                { label: 'Coupl',       sb: cellVal(sb.coupling),   lb: '' },
+                { label: 'Hex Hd.Plug', sb: sb.hex_head_plug ? (sb.hex_head_plug.description || cellVal(sb.hex_head_plug)) : '', lb: '' },
+                { label: 'Union',       sb: cellVal(sb.union),      lb: cellVal(lb.union) },
+                { label: 'Olet',        sb: cellVal(sb.olet),       lb: lb.olet ? (lb.olet.description || cellVal(lb.olet)) : '' },
+                { label: 'Swage',       sb: sb.swage ? (sb.swage.description || cellVal(sb.swage)) : '',
+                                        lb: lb.swage ? (lb.swage.description || cellVal(lb.swage)) : '' },
+            ];
+
+            const tableRows = pmsRows.map((r, i) => {
+                const isBold = i <= 1;
+                const w = isBold ? 'font-weight:700;' : '';
+                const bg = i % 2 === 0 ? 'background:#f8f9fa;' : '';
+                return `<tr style="${bg}">
+                    <td style="font-weight:700;padding:6px 10px;border-right:2px solid #1a5276;white-space:nowrap;">${r.label}</td>
+                    <td style="${w}padding:6px 10px;">${r.sb}</td>
+                    <td style="${w}padding:6px 10px;">${r.lb}</td>
+                </tr>`;
+            }).join('');
+
+            tableHtml = `
+            <table class="result-table" style="border-collapse:collapse;width:100%;">
+                <thead>
+                    <tr>
+                        <th style="background:#1a5276;color:#fff;padding:8px 10px;width:120px;"></th>
+                        <th style="background:#1a5276;color:#fff;padding:8px 10px;text-align:left;">Small Bore (NPS \u00bd\u2033 \u2013 1\u00bd\u2033)</th>
+                        <th style="background:#1a5276;color:#fff;padding:8px 10px;text-align:left;">Large Bore (NPS 2\u2033 \u2013 36\u2033)</th>
+                    </tr>
+                </thead>
+                <tbody>${tableRows}</tbody>
+            </table>`;
+        } else {
+            // ── Template A: Process — All BW (single column, no SB/LB split) ──
+            const oletDesc = lb.olet ? (lb.olet.description || cellVal(lb.olet)) : '';
+            const swageDesc = lb.swage ? (lb.swage.description || cellVal(lb.swage)) : '';
+            const pmsRows = [
+                { label: 'TYPE',     val: lb.fitting_type || '' },
+                { label: 'MOC',      val: lb.moc || '' },
+                { label: 'Elbow',    val: cellVal(lb.elbow) },
+                { label: 'Tee',      val: cellVal(lb.tee) },
+                { label: 'Red.',     val: cellVal(lb.reducer) },
+                { label: 'Cap',      val: cellVal(lb.cap) },
+                { label: 'Plug',     val: 'Hex Head, ASME B 16.11 (small bore only)' },
+                { label: 'Weldolet', val: oletDesc },
+                { label: 'Union',    val: cellVal(lb.union) },
+                { label: 'Swage',    val: swageDesc },
+            ];
+
+            const tableRows = pmsRows.map((r, i) => {
+                const isBold = i <= 1;
+                const w = isBold ? 'font-weight:700;' : '';
+                const bg = i % 2 === 0 ? 'background:#f8f9fa;' : '';
+                return `<tr style="${bg}">
+                    <td style="font-weight:700;padding:6px 10px;border-right:2px solid #1a5276;white-space:nowrap;">${r.label}</td>
+                    <td style="${w}padding:6px 10px;" colspan="2">${r.val}</td>
+                </tr>`;
+            }).join('');
+
+            tableHtml = `
+            <table class="result-table" style="border-collapse:collapse;width:100%;">
+                <thead>
+                    <tr>
+                        <th style="background:#1a5276;color:#fff;padding:8px 10px;width:120px;"></th>
+                        <th style="background:#1a5276;color:#fff;padding:8px 10px;text-align:left;" colspan="2">All Sizes (Butt Weld)</th>
+                    </tr>
+                </thead>
+                <tbody>${tableRows}</tbody>
+            </table>`;
+        }
+
+        document.getElementById('fittings-result').innerHTML = `
+            <h4 style="margin:12px 0 8px;color:#1a5276;border-bottom:2px solid #1a5276;padding-bottom:4px">
+                Fittings Data
+            </h4>
+            ${tableHtml}
+            ${reinfHtml}`;
     },
 
     // -- Step 6: Flanges + Valves ------------------------------------
